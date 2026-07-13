@@ -1,0 +1,94 @@
+# ===== Vivado Project =====
+# Vivado generated directories (keep only .srcs and .xpr)
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.gen/
+*.jou
+*.log
+*.str
+*.backup.*
+*.backup.jou
+*.backup.log
+
+# Vivado IP temp files
+*_sim_netlist.v
+*_stub.v
+*_stub.sv
+
+# Vivado synthesized/netlist files (not source)
+*_funcsim.v
+*_funcsim.sv
+
+# Vivado generated XCI files backup
+*.xci.bak
+
+# User config (may contain absolute paths)
+.vivado/
+.Xil/
+
+# ===== Simulation =====
+# Compiled simulation libs
+xsim.dir/
+*.wdb
+*.wcfg
+*.pb
+*.wcfg_*
+
+# Waveform files (generated, large)
+*.vcd
+*.ghw
+*.fst
+
+# ===== Build/Output =====
+*.bit
+*.bin
+*.mcs
+*.prm
+*.ltx
+*.dcp
+*.edf
+*.ngc
+*.ngd
+*.twr
+*.twx
+*.bgn
+*.drc
+*.xrpt
+*.rpt
+
+# Vivado SDK / Vitis
+*.elf
+*.sdk/
+*.hdf
+*.hwdef
+*.mss
+*.ld
+*.fsbl
+
+# ===== OS files =====
+Thumbs.db
+.DS_Store
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ===== Temp / Playwright =====
+.playwright-mcp/
+page-snapshot.yml
+__pycache__/
+*.pyc
+
+# ===== Editors =====
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ===== Large reference files (keep in cloud/separate) =====
+# PDFs > 50MB and large docx can be optionally ignored
+# Uncomment if needed:
+# ref/exam-materials/期末复习资料.pdf
