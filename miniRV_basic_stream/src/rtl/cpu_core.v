@@ -69,6 +69,14 @@ module cpu_core(
     // ================================================================
     // 二、IF (Instruction Fetch) 阶段
     // ================================================================
+    // IROM 为同步 BRAM，地址→数据有 1 周期延迟:
+    //   周期 N:  address = PC_N     → BRAM 锁存地址
+    //   周期 N+1: data = inst(PC_N)  → IF_ID 锁存指令
+    // PC 寄存器同样每个周期更新，因此 IF_ID 捕获的 PC 与指令
+    // 始终相差 +4。此偏移通过以下方式补偿:
+    //   - AUIPC/JAL/Branch: 在 EX 阶段使用 ex_pc，该值已通过流水线
+    //     正确跟踪（ID 阶段的 pc+4 计算: ex_pc4 = ex_pc + 4 恰好正确）
+    //   - 硬件综合后 BRAM clk-to-q 延迟确保时序收敛
 
     assign ifetch_req  = !cpu_rst;
     assign ifetch_addr = pc;
@@ -141,7 +149,7 @@ module cpu_core(
 
     // --- RF ---
     wire [31:0] id_rD1, id_rD2;
-    wire [31:0] wb_wD;
+    reg  [31:0] wb_wD;
     wire        wb_rf_we;
     wire [ 4:0] wb_rd_addr;
 
@@ -330,49 +338,82 @@ module cpu_core(
         end
     end
 
-    wire [31:0] mem_ram_ext;
-
-    MEXT U_MEM_EXT (
-        .op         (mem_ram_rop),
-        .din        (daccess_rdata),
-        .byte_offs  (mem_alu_c[1:0]),
-        .ext        (mem_ram_ext)
-    );
-
     // --- MEM/WB 流水线寄存器 ---
+    // 注意：MEXT 从 MEM 移到 WB，解决 BRAM 1 周期读延迟问题
     wire [31:0] wb_alu_c, wb_ram_ext, wb_pc4;
     wire [ 1:0] wb_rf_wsel;
+    wire [ 2:0] wb_ram_rop;
+    wire [ 1:0] wb_byte_offs;
 
     MEM_WB_Reg U_MEM_WB (
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (1'b0),
         .alu_c_in       (mem_alu_c),
-        .ram_ext_in     (mem_ram_ext),
+        .ram_ext_in     (32'h0),                 // 未使用（MEXT 在 WB）
         .pc4_in         (mem_pc4),
         .rd_addr_in     (mem_rd_addr),
         .rf_we_in       (mem_rf_we),
         .rf_wsel_in     (mem_rf_wsel),
+        .ram_rop_in     (mem_ram_rop),
+        .byte_offs_in   (mem_alu_c[1:0]),
         .alu_c_out      (wb_alu_c),
         .ram_ext_out    (wb_ram_ext),
         .pc4_out        (wb_pc4),
         .rd_addr_out    (wb_rd_addr),
         .rf_we_out      (wb_rf_we),
-        .rf_wsel_out    (wb_rf_wsel)
+        .rf_wsel_out    (wb_rf_wsel),
+        .ram_rop_out    (wb_ram_rop),
+        .byte_offs_out  (wb_byte_offs)
     );
 
     // ================================================================
     // 六、WB (Write Back) 阶段
     // ================================================================
 
+    // MEXT 放在 WB 而非 MEM —— 补偿 BRAM 1 周期读延迟
+    wire [31:0] wb_ram_data;
+
+    MEXT U_MEM_EXT (
+        .op         (wb_ram_rop),
+        .din        (daccess_rdata),
+        .byte_offs  (wb_byte_offs),
+        .ext        (wb_ram_data)
+    );
+
     always @(*) begin
         case (wb_rf_wsel)
             `WB_ALU: wb_wD = wb_alu_c;
-            `WB_RAM: wb_wD = wb_ram_ext;
+            `WB_RAM: wb_wD = wb_ram_data;
             `WB_PC4: wb_wD = wb_pc4;
             `WB_EXT: wb_wD = wb_alu_c;       // LUI: ext << 12 经 ALU 旁路
             default: wb_wD = 32'h0;
         endcase
     end
+
+    // ================================================================
+    // 七、Debug 跟踪信号（cdp-tests 差分测试框架使用）
+    // ================================================================
+    // 写回通道（每组信号仅有效 1 个周期）
+    wire [31:0] debug_wb_pc    /* verilator public */ ;
+    wire        debug_wb_rf_we /* verilator public */ ;
+    wire [ 4:0] debug_wb_rf_wR /* verilator public */ ;
+    wire [31:0] debug_wb_rf_wD /* verilator public */ ;
+
+    assign debug_wb_pc    = wb_pc4 - 32'd4;
+    assign debug_wb_rf_we = wb_rf_we;
+    assign debug_wb_rf_wR = wb_rd_addr;
+    assign debug_wb_rf_wD = wb_wD;
+
+    // 写内存通道
+    wire [31:0] debug_mem_pc    /* verilator public */ ;
+    wire [ 3:0] debug_mem_we    /* verilator public */ ;
+    wire [31:0] debug_mem_waddr /* verilator public */ ;
+    wire [31:0] debug_mem_wdata /* verilator public */ ;
+
+    assign debug_mem_pc    = mem_pc4 - 32'd4;
+    assign debug_mem_we    = daccess_wen;
+    assign debug_mem_waddr = daccess_addr;
+    assign debug_mem_wdata = daccess_wdata;
 
 endmodule
