@@ -30,9 +30,9 @@ module cpu_core(
     input  wire         cpu_clk,
 
     // 指令取指接口
-    output wire         ifetch_req,
-    output wire [31:0]  ifetch_addr,
-    input  wire         ifetch_valid,
+    output wire         ifetch_req    /* verilator public */,
+    output wire [31:0]  ifetch_addr   /* verilator public */,
+    input  wire         ifetch_valid  /* verilator public */,
     input  wire [31:0]  ifetch_inst,
 
     // 数据访问接口
@@ -99,7 +99,9 @@ module cpu_core(
         .pc4        (pc4)
     );
 
-    // ifetch_valid 仅1拍 → invalid 后强制 NOP
+    // BRAM 为同步读（1 周期延迟），复位期间读出的 mem[0] 已就绪
+    // ifetch_valid 在复位后第 1 拍为 0（NBA 滞后）→ 第 1 拍取 NOP
+    // 这个 NOP 气泡恰好吸收 BRAM 冗余读出，避免指令重复捕获
     wire [31:0] if_inst = ifetch_valid ? ifetch_inst : 32'h00000013;
 
     wire [31:0] id_pc, id_inst;
@@ -325,14 +327,15 @@ module cpu_core(
     // 五、MEM (Memory Access) 阶段
     // ================================================================
 
-    // 总线接口（打一拍）
+    // 总线接口（EX 阶段组合产生请求，打一拍后在 MEM 阶段输出）
+    // 地址 ex_alu_c 与 ren/wen/wdata 必须来自同一条指令，否则地址滞后 1 拍
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
             daccess_ren   <= 4'h0;
             daccess_wen   <= 4'h0;
         end else begin
             daccess_ren   <= ex_da_ren;
-            daccess_addr  <= mem_alu_c;
+            daccess_addr  <= ex_alu_c;
             daccess_wen   <= ex_da_wen;
             daccess_wdata <= ex_da_wdata;
         end
@@ -400,7 +403,7 @@ module cpu_core(
     wire [ 4:0] debug_wb_rf_wR /* verilator public */ ;
     wire [31:0] debug_wb_rf_wD /* verilator public */ ;
 
-    assign debug_wb_pc    = wb_pc4 - 32'd4;
+    assign debug_wb_pc    = wb_pc4 - 32'd8;
     assign debug_wb_rf_we = wb_rf_we;
     assign debug_wb_rf_wR = wb_rd_addr;
     assign debug_wb_rf_wD = wb_wD;
@@ -411,7 +414,7 @@ module cpu_core(
     wire [31:0] debug_mem_waddr /* verilator public */ ;
     wire [31:0] debug_mem_wdata /* verilator public */ ;
 
-    assign debug_mem_pc    = mem_pc4 - 32'd4;
+    assign debug_mem_pc    = mem_pc4 - 32'd8;
     assign debug_mem_we    = daccess_wen;
     assign debug_mem_waddr = daccess_addr;
     assign debug_mem_wdata = daccess_wdata;
