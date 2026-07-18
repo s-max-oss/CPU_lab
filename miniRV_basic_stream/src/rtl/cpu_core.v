@@ -15,8 +15,10 @@
 //   3. 控制信号随指令沿流水线寄存器传播
 //   4. 分支在 EX 阶段解析，跳转时 flush IF/ID 和 ID/EX
 //
-// 【待实现（阶段二~四）】
-//   - 转发 (Forwarding): EX/MEM → ALU, MEM/WB → ALU
+// 【已实现】
+//   - 转发 (Forwarding): EX/MEM→EX, MEM/WB→EX, WB→ID （Phase 2）
+//
+// 【待实现（阶段三~四）】
 //   - 阻塞 (Stall): Load-use 冒险检测
 //   - 乘除法多周期处理
 // ============================================================================
@@ -166,6 +168,11 @@ module cpu_core(
         .wD     (wb_wD)
     );
 
+    // WB→ID 转发: RF NBA 写在同一 posedge 不可见，若 WB 正在写目标寄存器
+    // 则直通 wb_wD，避免 ID_EX 捕获旧值
+    wire [31:0] id_rD1_fwd = (wb_rf_we && wb_rd_addr != 5'h0 && wb_rd_addr == id_inst[19:15]) ? wb_wD : id_rD1;
+    wire [31:0] id_rD2_fwd = (wb_rf_we && wb_rd_addr != 5'h0 && wb_rd_addr == id_inst[24:20]) ? wb_wD : id_rD2;
+
     // --- SEXT ---
     wire [31:0] id_ext;
 
@@ -196,8 +203,8 @@ module cpu_core(
         .flush          (flush),
         .stall          (stall),
         .pc_in          (id_pc),
-        .rD1_in         (id_rD1),
-        .rD2_in         (id_rD2),
+        .rD1_in         (id_rD1_fwd),
+        .rD2_in         (id_rD2_fwd),
         .ext_in         (id_ext),
         .pc4_in         (id_pc4),
         .rs1_addr_in    (id_inst[19:15]),
@@ -239,9 +246,35 @@ module cpu_core(
     // 四、EX (Execute) 阶段
     // ================================================================
 
-    // ALU 操作数（阶段二将加入 Forward MUX）
-    wire [31:0] ex_alu_a = ex_alua_sel ? ex_pc  : ex_rD1;
-    wire [31:0] ex_alu_b = ex_alub_sel ? ex_ext : ex_rD2;
+    // --- 转发 (Forwarding) 单元 — Phase 2 ---
+    // 两条转发路径，EX/MEM 优先于 MEM/WB:
+    //   EX/MEM → EX: 上一条指令的 ALU 结果（在 MEM 阶段）
+    //   MEM/WB → EX: 上上条指令将写入 RF 的值（在 WB 阶段）
+    //
+    // 注意：Load-use 冒险不在此处理（待 Phase 3 stall 单元），
+    //   load 后面跟使用指令仍需手动插 NOP。
+
+    // EX/MEM 转发检测
+    // rs2_raw: 不带 alub_sel 门控，供 store data 路径使用
+    // rs2: 带 !ex_alub_sel 门控，防止 I-type 的 inst[24:20]（立即数位）被误判为 rs2
+    wire fwd_ex_rs1 = mem_rf_we && (mem_rd_addr != 5'h0) && (mem_rd_addr == ex_rs1_addr);
+    wire fwd_ex_rs2_raw = mem_rf_we && (mem_rd_addr != 5'h0) && (mem_rd_addr == ex_rs2_addr);
+    wire fwd_ex_rs2 = fwd_ex_rs2_raw && !ex_alub_sel;
+
+    // MEM/WB 转发检测（EX/MEM 优先）
+    wire fwd_wb_rs1 = wb_rf_we && (wb_rd_addr != 5'h0) && (wb_rd_addr == ex_rs1_addr) && !fwd_ex_rs1;
+    wire fwd_wb_rs2_raw = wb_rf_we && (wb_rd_addr != 5'h0) && (wb_rd_addr == ex_rs2_addr) && !fwd_ex_rs2_raw;
+    wire fwd_wb_rs2 = fwd_wb_rs2_raw && !ex_alub_sel;
+
+    // rs2 转发值（用于 store data，不受 alub_sel 影响）
+    wire [31:0] ex_rD2_fwd = fwd_ex_rs2_raw ? mem_alu_c : (fwd_wb_rs2_raw ? wb_wD : ex_rD2);
+
+    // ALU 操作数 MUX（含转发）
+    wire [31:0] ex_alu_a_raw = ex_alua_sel ? ex_pc  : ex_rD1;
+    wire [31:0] ex_alu_a     = fwd_ex_rs1 ? mem_alu_c : (fwd_wb_rs1 ? wb_wD : ex_alu_a_raw);
+
+    wire [31:0] ex_alu_b_raw = ex_alub_sel ? ex_ext : ex_rD2;
+    wire [31:0] ex_alu_b     = fwd_ex_rs2 ? mem_alu_c : (fwd_wb_rs2 ? wb_wD : ex_alu_b_raw);
 
     wire [31:0] ex_alu_c;
     wire        ex_br;
@@ -282,7 +315,7 @@ module cpu_core(
         .da_ren     (ex_da_ren),
         .da_addr    (),                      // 直通，在 MEM 阶段用 alu_c
         .ram_wop    (ex_ram_wop),
-        .ram_wdata  (ex_rD2),
+        .ram_wdata  (ex_rD2_fwd),
         .da_wen     (ex_da_wen),
         .da_wdata   (ex_da_wdata)
     );

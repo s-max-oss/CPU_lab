@@ -4,7 +4,7 @@
 <!-- Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.                   -->
 <!-- Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.   -->
 
-<Project Product="Vivado" Version="7" Minor="65" Path="D:/HuaweiMoveData/Users/20805/Desktop/homework/CPU_lab/miniRV_basic/miniRV.xpr">
+<Project Product="Vivado" Version="7" Minor="65" Path="D:/HuaweiMoveData/Users/20805/Desktop/homework/CPU_lab/miniRV_basic_stream/miniRV.xpr">
   <DefaultLaunch Dir="$PRUNDIR"/>
   <Configuration>
     <Option Name="Id" Val="8068a6fb3a134c46b6c8a18bdff0f3f6"/>
@@ -59,7 +59,7 @@
     <Option Name="IPStaticSourceDir" Val="$PIPUSERFILESDIR/ipstatic"/>
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="FeatureSet" Val="FeatureSet_Classic"/>
-    <Option Name="WTXSimLaunchSim" Val="1613"/>
+    <Option Name="WTXSimLaunchSim" Val="1614"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -91,106 +91,136 @@
   <FileSets Version="1" Minor="32">
     <FileSet Name="sources_1" Type="DesignSrcs" RelSrcDir="$PSRCDIR/sources_1" RelGenDir="$PGENDIR/sources_1">
       <Filter Type="Srcs"/>
-      <File Path="$PPRDIR/src/rtl/ALU.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/ALU.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/ALU.v"/>
+          <Attr Name="ImportTime" Val="1784271634"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/Controller.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/Controller.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/Controller.v"/>
+          <Attr Name="ImportTime" Val="1784271577"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/Data_RAM.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/Data_RAM.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/Data_RAM.v"/>
+          <Attr Name="ImportTime" Val="1784271828"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/Inst_ROM.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/Inst_ROM.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/Inst_ROM.v"/>
+          <Attr Name="ImportTime" Val="1784271826"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/MEXT.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/MEXT.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/MEXT.v"/>
+          <Attr Name="ImportTime" Val="1784271686"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/MREQ.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/MREQ.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/MREQ.v"/>
+          <Attr Name="ImportTime" Val="1784271683"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/NPC.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/NPC.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/NPC.v"/>
+          <Attr Name="ImportTime" Val="1784271505"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/PC.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/PC.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/PC.v"/>
+          <Attr Name="ImportTime" Val="1784292166"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/RF.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/RF.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/RF.v"/>
+          <Attr Name="ImportTime" Val="1784271508"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/SEXT.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/SEXT.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/SEXT.v"/>
+          <Attr Name="ImportTime" Val="1784271511"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/cpu_core.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/cpu_core.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/cpu_core.v"/>
+          <Attr Name="ImportTime" Val="1784294944"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/cpu_top.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/cpu_top.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/cpu_top.v"/>
+          <Attr Name="ImportTime" Val="1784271822"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/divider.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/divider.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/divider.v"/>
+          <Attr Name="ImportTime" Val="1784271641"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/multiplier.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/multiplier.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/multiplier.v"/>
+          <Attr Name="ImportTime" Val="1784271637"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/src/rtl/miniRV_SoC.v">
+      <File Path="$PSRCDIR/sources_1/imports/rtl/miniRV_SoC.v">
         <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/miniRV_SoC.v"/>
+          <Attr Name="ImportTime" Val="1783989170"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -205,6 +235,42 @@
       <File Path="$PPRDIR/src/coe/lw.coe">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/rtl/EX_MEM_Reg.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/EX_MEM_Reg.v"/>
+          <Attr Name="ImportTime" Val="1784292201"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/rtl/ID_EX_Reg.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/ID_EX_Reg.v"/>
+          <Attr Name="ImportTime" Val="1784292347"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/rtl/IF_ID_Reg.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/IF_ID_Reg.v"/>
+          <Attr Name="ImportTime" Val="1784292175"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sources_1/imports/rtl/MEM_WB_Reg.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/src/rtl/MEM_WB_Reg.v"/>
+          <Attr Name="ImportTime" Val="1784294366"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
@@ -286,7 +352,7 @@
         <Option Name="XSimWcfgFile" Val="$PPRDIR/soc_simu_alu.wcfg"/>
         <Option Name="XSimWcfgFile" Val="$PPRDIR/soc_simu_with_ddr3.wcfg"/>
         <Option Name="XSimWcfgFile" Val="$PPRDIR/soc_simple_tb.wcfg"/>
-        <Option Name="xsim.simulate.runtime" Val="10us"/>
+        <Option Name="xsim.simulate.runtime" Val="100us"/>
         <Option Name="xsim.simulate.log_all_signals" Val="true"/>
       </Config>
     </FileSet>
