@@ -16,10 +16,10 @@
 //   4. 分支在 EX 阶段解析，跳转时 flush IF/ID 和 ID/EX
 //
 // 【已实现】
-//   - 转发 (Forwarding): EX/MEM→EX, MEM/WB→EX, WB→ID （Phase 2）
+//   - 转发 (Forwarding): WB→ID, EX/MEM→EX, MEM/WB→EX （Phase 2）
+//   - 阻塞 (Stall): Load-use 冒险检测, 1 周期阻塞 （Phase 3）
 //
-// 【待实现（阶段三~四）】
-//   - 阻塞 (Stall): Load-use 冒险检测
+// 【待实现（阶段四）】
 //   - 乘除法多周期处理
 // ============================================================================
 
@@ -57,9 +57,15 @@ module cpu_core(
     wire [31:0] pc4;                       // NPC 输出的 pc+4
 
     // --- 阻塞和冲刷 ---
-    wire        stall;                      // Load-use 阻塞（阶段三，暂=0）
+    wire        stall;                      // Load-use 阻塞（Phase 3）
     wire        flush;                      // 分支跳转冲刷（EX 阶段产生）
-    assign      stall = 1'b0;               // TODO: 阶段三
+
+    // Load-use 检测: EX 阶段是 load 且 ID 阶段使用其目标寄存器
+    // stall=1 → PC 暂停, IF/ID 保持, ID/EX 插入气泡
+    // 1 个 stall 周期后 load 进入 WB，MEM/WB→EX 转发即可提供数据
+    wire ex_is_load = ex_rf_we && (ex_rf_wsel == `WB_RAM);
+    assign stall = ex_is_load && (ex_rd_addr != 5'h0) &&
+                   ((ex_rd_addr == id_inst[19:15]) || (ex_rd_addr == id_inst[24:20]));
 
     // --- NPC 输入选择信号 ---
     wire [ 1:0] npc_op;
