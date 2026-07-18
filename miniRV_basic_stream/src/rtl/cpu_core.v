@@ -87,7 +87,11 @@ module cpu_core(
     //   - 硬件综合后 BRAM clk-to-q 延迟确保时序收敛
 
     assign ifetch_req  = !cpu_rst;
-    assign ifetch_addr = pc;
+
+    // stall=1 时 IROM 地址回退 4 字节，重新取指被 IF/ID 丢弃的那条指令
+    // 原因：同步 BRAM 有 1 周期读延迟，stall 阻止 IF/ID 捕获时 IROM 已
+    // 锁存了下一个地址，导致中间一条指令丢失
+    assign ifetch_addr = stall ? (pc - 32'd4) : pc;
 
     PC U_PC (
         .clk    (cpu_clk),
