@@ -63,8 +63,7 @@ module cpu_core(
     wire stall_load = ex_is_load && (ex_rd_addr != 5'h0) &&
                       ((ex_rd_addr == id_inst[19:15]) || (ex_rd_addr == id_inst[24:20]));
 
-    // 多周期乘除法完成检测: ex_busy 下降沿表示 ALU 刚算完
-    // 需要额外 1 周期保持流水线，让 EX_MEM 捕获最终结果（rf_we 不再被门控）
+    // 多周期 ALU 完成检测: ex_busy 下降沿表示 ALU 刚算完（真多周期 ALU 用）
     reg ex_busy_r;
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst)
@@ -74,12 +73,28 @@ module cpu_core(
     end
     wire ex_busy_done = ex_busy_r && !ex_busy;
 
-    // 综合阻塞: load-use (1 周期) + 多周期乘除法 (N 周期) + 完成周期 (1 周期)
-    assign stall = stall_load || ex_busy || ex_busy_done;
+    // MUL/DIV 单周期延迟: 乘法器/除法器用 Verilog 运算符但结果寄存器输出
+    // 进入 EX 后需 2 拍: cnt=2 锁存操作数, cnt=1 捕获结果, cnt=0 完成
+    reg [1:0] ex_mul_div_cnt;
+    wire mul_div_entering_ex = !id_ex_stall && (id_is_mul || id_is_div);
+
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if (cpu_rst)
+            ex_mul_div_cnt <= 2'd0;
+        else if (mul_div_entering_ex)
+            ex_mul_div_cnt <= 2'd2;
+        else if (ex_mul_div_cnt > 0)
+            ex_mul_div_cnt <= ex_mul_div_cnt - 2'd1;
+    end
+
+    wire ex_mul_div_stall = ex_mul_div_cnt > 0;
+
+    // 综合阻塞
+    assign stall = stall_load || ex_busy || ex_busy_done || ex_mul_div_stall;
 
     // ID/EX 控制信号（load-use 清除 vs 多周期保持）
-    wire id_ex_flush = flush || stall_load;          // 分支跳转或 load-use → 插入气泡
-    wire id_ex_stall = ex_busy || ex_busy_done;      // 多周期乘除法 → 保持 EX 不变
+    wire id_ex_flush = flush || stall_load;
+    wire id_ex_stall = ex_busy || ex_busy_done || ex_mul_div_stall;
 
     // --- NPC 输入选择信号 ---
     wire [ 1:0] npc_op;
@@ -366,7 +381,7 @@ module cpu_core(
         .npc_op_in      (ex_npc_op),
         .ram_rop_in     (ex_ram_rop),
         .ram_wop_in     (ex_ram_wop),
-        .rf_we_in       (ex_rf_we && !ex_busy),   // 多周期运算期间阻止写回
+        .rf_we_in       (ex_rf_we && !ex_busy && !(ex_mul_div_cnt == 2'd2)),   // 多周期/锁存期间阻止写回
         .rf_wsel_in     (ex_rf_wsel),
         .alu_c_out      (mem_alu_c),
         .rD2_out        (mem_rD2),
