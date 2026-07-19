@@ -18,9 +18,7 @@
 // 【已实现】
 //   - 转发 (Forwarding): WB→ID, EX/MEM→EX, MEM/WB→EX （Phase 2）
 //   - 阻塞 (Stall): Load-use 冒险检测, 1 周期阻塞 （Phase 3）
-//
-// 【待实现（阶段四）】
-//   - 乘除法多周期处理
+//   - 多周期乘除法: ex_busy 期间阻塞 IF/ID 并保持 EX 阶段 （Phase 4）
 // ============================================================================
 
 `timescale 1ns / 1ps
@@ -57,15 +55,31 @@ module cpu_core(
     wire [31:0] pc4;                       // NPC 输出的 pc+4
 
     // --- 阻塞和冲刷 ---
-    wire        stall;                      // Load-use 阻塞（Phase 3）
+    wire        stall;                      // 流水线阻塞（load-use + 多周期乘除法）
     wire        flush;                      // 分支跳转冲刷（EX 阶段产生）
 
     // Load-use 检测: EX 阶段是 load 且 ID 阶段使用其目标寄存器
-    // stall=1 → PC 暂停, IF/ID 保持, ID/EX 插入气泡
-    // 1 个 stall 周期后 load 进入 WB，MEM/WB→EX 转发即可提供数据
     wire ex_is_load = ex_rf_we && (ex_rf_wsel == `WB_RAM);
-    assign stall = ex_is_load && (ex_rd_addr != 5'h0) &&
-                   ((ex_rd_addr == id_inst[19:15]) || (ex_rd_addr == id_inst[24:20]));
+    wire stall_load = ex_is_load && (ex_rd_addr != 5'h0) &&
+                      ((ex_rd_addr == id_inst[19:15]) || (ex_rd_addr == id_inst[24:20]));
+
+    // 多周期乘除法完成检测: ex_busy 下降沿表示 ALU 刚算完
+    // 需要额外 1 周期保持流水线，让 EX_MEM 捕获最终结果（rf_we 不再被门控）
+    reg ex_busy_r;
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if (cpu_rst)
+            ex_busy_r <= 1'b0;
+        else
+            ex_busy_r <= ex_busy;
+    end
+    wire ex_busy_done = ex_busy_r && !ex_busy;
+
+    // 综合阻塞: load-use (1 周期) + 多周期乘除法 (N 周期) + 完成周期 (1 周期)
+    assign stall = stall_load || ex_busy || ex_busy_done;
+
+    // ID/EX 控制信号（load-use 清除 vs 多周期保持）
+    wire id_ex_flush = flush || stall_load;          // 分支跳转或 load-use → 插入气泡
+    wire id_ex_stall = ex_busy || ex_busy_done;      // 多周期乘除法 → 保持 EX 不变
 
     // --- NPC 输入选择信号 ---
     wire [ 1:0] npc_op;
@@ -210,8 +224,8 @@ module cpu_core(
     ID_EX_Reg U_ID_EX (
         .clk            (cpu_clk),
         .rst            (cpu_rst),
-        .flush          (flush),
-        .stall          (stall),
+        .flush          (id_ex_flush),
+        .stall          (id_ex_stall),
         .pc_in          (id_pc),
         .rD1_in         (id_rD1_fwd),
         .rD2_in         (id_rD2_fwd),
@@ -352,7 +366,7 @@ module cpu_core(
         .npc_op_in      (ex_npc_op),
         .ram_rop_in     (ex_ram_rop),
         .ram_wop_in     (ex_ram_wop),
-        .rf_we_in       (ex_rf_we),
+        .rf_we_in       (ex_rf_we && !ex_busy),   // 多周期运算期间阻止写回
         .rf_wsel_in     (ex_rf_wsel),
         .alu_c_out      (mem_alu_c),
         .rD2_out        (mem_rD2),
@@ -372,11 +386,12 @@ module cpu_core(
 
     // 总线接口（EX 阶段组合产生请求，打一拍后在 MEM 阶段输出）
     // 地址 ex_alu_c 与 ren/wen/wdata 必须来自同一条指令，否则地址滞后 1 拍
+    // 多周期运算期间跳过，避免中间值触发虚假访存
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
             daccess_ren   <= 4'h0;
             daccess_wen   <= 4'h0;
-        end else begin
+        end else if (!ex_busy) begin
             daccess_ren   <= ex_da_ren;
             daccess_addr  <= ex_alu_c;
             daccess_wen   <= ex_da_wen;
