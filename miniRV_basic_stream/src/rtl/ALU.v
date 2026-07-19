@@ -85,6 +85,19 @@ module ALU (
 
     reg  [ 4:0] op_r;  // ★关键★ 锁存的操作码，在乘除法多周期运算期间保持不变
 
+    // 组合乘除结果 — 绕过 multiplier/divider 模块的寄存输出
+    // （模块有 1 周期延迟，但流水线 EX 阶段需要当拍组合结果）
+    wire [63:0] mul_comb  = {{32{a[31]}}, a} * {{32{b[31]}}, b};
+    wire [65:0] mulu_comb = {33'd0, a} * {33'd0, b};
+
+    wire [31:0] div_quo_abs = (b_abs != 0) ? a_abs / b_abs : 32'hFFFFFFFF;
+    wire [31:0] div_rem_abs = (b_abs != 0) ? a_abs % b_abs : a_abs;
+    wire [31:0] div_quo_signed_comb = quo_sign ? (~div_quo_abs + 32'd1) : div_quo_abs;
+    wire [31:0] div_rem_signed_comb = rem_sign ? (~div_rem_abs + 32'd1) : div_rem_abs;
+
+    wire [31:0] divu_quo_comb = (b != 0) ? a / b : 32'hFFFFFFFF;
+    wire [31:0] divu_rem_comb = (b != 0) ? a % b : a;
+
     // 结果MUX：op_r 非零说明乘除法正在进行，优先用 op_r；否则用当拍的 op
     always @(*) begin
         case (op_r != 4'h0 ? op_r : op)
@@ -100,14 +113,14 @@ module ALU (
             `ALU_SLT  : c = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0;
             `ALU_SLTU : c = (a < b) ? 32'd1 : 32'd0;
 
-            // --- 多周期运算（读取子模块结果） ---
-            `ALU_MUL  : c = mul_res[31:0];                   // 乘法低32位
-            `ALU_MULH : c = mul_res[63:32];                  // 有符号乘法高32位
-            `ALU_MULHU: c = mulu_res[63:32];                 // 无符号乘法高32位
-            `ALU_DIV  : c = div_quo_signed;                  // 有符号除法的商
-            `ALU_DIVU : c = divu_quo;                        // 无符号除法的商
-            `ALU_REM  : c = div_rem_signed;                  // 有符号除法的余数
-            `ALU_REMU : c = divu_rem;                        // 无符号除法的余数
+            // --- 乘除法运算（组合逻辑，当拍出结果） ---
+            `ALU_MUL  : c = mul_comb[31:0];
+            `ALU_MULH : c = mul_comb[63:32];
+            `ALU_MULHU: c = mulu_comb[63:32];
+            `ALU_DIV  : c = div_quo_signed_comb;
+            `ALU_DIVU : c = divu_quo_comb;
+            `ALU_REM  : c = div_rem_signed_comb;
+            `ALU_REMU : c = divu_rem_comb;
 
             default   : c = 32'h0;
         endcase
