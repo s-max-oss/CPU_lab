@@ -4,8 +4,8 @@
 // 连接 ID（译码/寄存器读）和 EX（执行）阶段。
 // 锁存寄存器读值、立即数、目标寄存器号以及全部控制信号。
 //
-// flush=1 → 控制信号清零（插入气泡/Bubble）
-// stall=1 → 控制信号清零（插入气泡）
+// flush=1 → 控制信号清零（插入气泡/Bubble）— 分支跳转、load-use stall
+// stall=1 → 保持当前值（Hold）— 多周期乘除法阻塞
 // ============================================================================
 
 `timescale 1ns / 1ps
@@ -63,7 +63,7 @@ module ID_EX_Reg (
 );
 
     always @(posedge clk or posedge rst) begin
-        if (rst || flush || stall) begin
+        if (rst || flush) begin
             // 气泡：控制信号全部清零 = NOP（不写寄存器、不访存、顺序执行）
             pc_out        <= 32'h0;
             rD1_out       <= 32'h0;
@@ -84,7 +84,7 @@ module ID_EX_Reg (
             rf_wsel_out   <= 2'b0;
             is_mul_out    <= 1'b0;
             is_div_out    <= 1'b0;
-        end else begin
+        end else if (!stall) begin
             pc_out        <= pc_in;
             rD1_out       <= rD1_in;
             rD2_out       <= rD2_in;

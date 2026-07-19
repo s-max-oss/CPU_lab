@@ -98,9 +98,9 @@ module ALU (
     wire [31:0] divu_quo_comb = (b != 0) ? a / b : 32'hFFFFFFFF;
     wire [31:0] divu_rem_comb = (b != 0) ? a % b : a;
 
-    // 结果MUX：op_r 非零说明乘除法正在进行，优先用 op_r；否则用当拍的 op
+    // 结果MUX：组合逻辑，始终使用当前 op（乘除法也已改为组合逻辑）
     always @(*) begin
-        case (op_r != 4'h0 ? op_r : op)
+        case (op)
             // --- 单周期运算 ---
             `ALU_ADD  : c = a + b;
             `ALU_SUB  : c = a - b;
