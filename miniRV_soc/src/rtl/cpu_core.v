@@ -63,8 +63,15 @@ module cpu_core(
     wire stall_load = ex_is_load && (ex_rd_addr != 5'h0) &&
                       ((ex_rd_addr == id_inst[19:15]) || (ex_rd_addr == id_inst[24:20]));
 
-    // 综合阻塞: 目前仅 load-use 需要阻塞
+    // 综合阻塞: load-use + AXI 取指未就绪
+`ifdef USE_AXI
+    assign stall = stall_load || !ifetch_valid;
+    // ifetch_valid=1 时请求 npc(下一条指令), 避免 ICache 重复捕获旧 PC
+    assign ifetch_addr = stall_load ? (pc - 32'd4) : (ifetch_valid ? npc : pc);
+`else
     assign stall = stall_load;
+    assign ifetch_addr = stall ? (pc - 32'd4) : pc;
+`endif
 
     // ID/EX 控制信号
     wire id_ex_flush = flush || stall_load;          // 分支跳转或 load-use → 插入气泡
@@ -93,7 +100,7 @@ module cpu_core(
     // stall=1 时 IROM 地址回退 4 字节，重新取指被 IF/ID 丢弃的那条指令
     // 原因：同步 BRAM 有 1 周期读延迟，stall 阻止 IF/ID 捕获时 IROM 已
     // 锁存了下一个地址，导致中间一条指令丢失
-    assign ifetch_addr = stall ? (pc - 32'd4) : pc;
+    // 注: USE_AXI 模式下 ifetch_addr 在上面定义（仅 load-use 回退 PC-4）
 
     PC U_PC (
         .clk    (cpu_clk),
@@ -118,6 +125,13 @@ module cpu_core(
     // 这个 NOP 气泡恰好吸收 BRAM 冗余读出，避免指令重复捕获
     wire [31:0] if_inst = ifetch_valid ? ifetch_inst : 32'h00000013;
 
+    // AXI 模式: ID 消费 IF_ID 数据后清除，防止重复执行
+`ifdef USE_AXI
+    wire if_clear = !stall_load && !ifetch_valid;
+`else
+    wire if_clear = 1'b0;
+`endif
+
     wire [31:0] id_pc, id_inst;
 
     IF_ID_Reg U_IF_ID (
@@ -125,6 +139,7 @@ module cpu_core(
         .rst      (cpu_rst),
         .flush    (flush || flush_d1),
         .stall    (stall),
+        .clear    (if_clear),
         .pc_in    (pc),
         .inst_in  (if_inst),
         .pc_out   (id_pc),
@@ -191,7 +206,11 @@ module cpu_core(
         .ext    (id_ext)
     );
 
-    wire [31:0] id_pc4 = id_pc;                  // JAL/JALR 返回地址（id_pc 已有 BRAM +4 偏移，即为 pc+4）
+`ifdef USE_AXI
+    wire [31:0] id_pc4 = id_pc + 32'd4;  // USE_AXI: id_pc = 指令地址, +4 = 下条指令地址
+`else
+    wire [31:0] id_pc4 = id_pc;          // JAL/JALR 返回地址（id_pc 已有 BRAM +4 偏移，即为 pc+4）
+`endif
 
     // --- ID/EX 流水线寄存器 ---
     wire [31:0] ex_pc, ex_rD1, ex_rD2, ex_ext, ex_pc4;
@@ -276,7 +295,11 @@ module cpu_core(
     // ALU 操作数 MUX（含转发）
     // LUI 的 inst[19:15] 是立即数的一部分，不可作为 rs1 读取；ALU A 应为 0
     wire ex_is_lui = (ex_rf_wsel == `WB_EXT);
+`ifdef USE_AXI
+    wire [31:0] ex_alu_a_raw = ex_alua_sel ? ex_pc : (ex_is_lui ? 32'd0 : ex_rD1);
+`else
     wire [31:0] ex_alu_a_raw = ex_alua_sel ? (ex_pc - 32'd4) : (ex_is_lui ? 32'd0 : ex_rD1);
+`endif
     wire [31:0] ex_alu_a     = fwd_ex_rs1 ? mem_alu_c : (fwd_wb_rs1 ? wb_wD : ex_alu_a_raw);
 
     wire [31:0] ex_alu_b_raw = ex_alub_sel ? ex_ext : ex_rD2;
@@ -301,7 +324,12 @@ module cpu_core(
 
     // BRAM 有 1 周期读延迟，IF_ID 捕获的 PC 比真实指令地址大 +4
     // ex_pc 已包含这个偏移，跳转/分支目标须减去 4
+    // 注: USE_AXI 模式下流水线 stall 消除偏移，无需补偿
+`ifdef USE_AXI
+    wire [31:0] ex_real_pc = ex_pc;
+`else
     wire [31:0] ex_real_pc = ex_pc - 32'd4;
+`endif
 
     // flush 后 IROM 流水线内残留旧 PC 的数据，需额外冲刷 IF_ID 一周期
     reg flush_d1;
@@ -445,7 +473,11 @@ module cpu_core(
     wire [ 4:0] debug_wb_rf_wR /* verilator public */ ;
     wire [31:0] debug_wb_rf_wD /* verilator public */ ;
 
+`ifdef USE_AXI
+    assign debug_wb_pc    = wb_pc4;
+`else
     assign debug_wb_pc    = wb_pc4 - 32'd4;
+`endif
     assign debug_wb_rf_we = wb_rf_we;
     assign debug_wb_rf_wR = wb_rd_addr;
     assign debug_wb_rf_wD = wb_wD;
