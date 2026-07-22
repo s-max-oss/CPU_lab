@@ -64,10 +64,10 @@ module cpu_core(
 
     // ================= 指令取指接口（连接 Inst_ROM） =================
     // CPU → IROM
-    output wire         ifetch_req,       // 取指请求：告诉IROM"我要读指令"
-    output wire [31:0]  ifetch_addr,      // 取指地址：PC值，传给IROM的地址端口
+    output wire         ifetch_req    /* verilator public */,       // 取指请求：告诉IROM"我要读指令"
+    output wire [31:0]  ifetch_addr   /* verilator public */,      // 取指地址：PC值，传给IROM的地址端口
     // IROM → CPU
-    input  wire         ifetch_valid,     // 取指有效：IROM说"数据准备好了，只有1拍！"
+    input  wire         ifetch_valid  /* verilator public */,     // 取指有效：IROM说"数据准备好了，只有1拍！"
     input  wire [31:0]  ifetch_inst,      // 取指指令：32位指令字
 
     // ================= 数据访问接口（连接 Data_RAM） =================
