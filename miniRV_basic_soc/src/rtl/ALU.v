@@ -97,10 +97,11 @@ module ALU (
     endfunction
 
     // ================================================================
-    // 组合乘法结果
+    // 组合乘法结果（仅 M 指令时激活，减少非 M 路径的时序压力）
     // ================================================================
+    wire mul_en = (op == `ALU_MUL) || (op == `ALU_MULH) || (op == `ALU_MULHU);
     wire [63:0] booth_result;
-    assign booth_result = booth_mul(a, b);
+    assign booth_result = mul_en ? booth_mul(a, b) : 64'd0;
 
     // MULHU 校正：
     //   无符号积 = 有符号积 + a[31]*b*2^32 + b[31]*a*2^32
@@ -118,9 +119,12 @@ module ALU (
     // 除零检测
     wire div_by_zero = (b_abs == 32'd0);
 
-    // 无符号除法（非除零时有效）
+    // 除法使能（仅 DIV/DIVU/REM/REMU 指令时激活）
+    wire div_en = (op == `ALU_DIV) || (op == `ALU_DIVU) || (op == `ALU_REM) || (op == `ALU_REMU);
+
+    // 无符号除法（非除零时有效，仅除法指令时计算）
     wire [63:0] div_result;
-    assign div_result = restore_div(a_abs, b_abs);
+    assign div_result = div_en ? restore_div(a_abs, b_abs) : 64'd0;
 
     wire [31:0] quo_abs = div_by_zero ? 32'hFFFFFFFF : div_result[63:32];
     wire [31:0] rem_abs = div_by_zero ? a_abs      : div_result[31:0];
@@ -134,9 +138,9 @@ module ALU (
     wire [31:0] quo_signed = div_by_zero ? 32'hFFFFFFFF : (quo_sign ? (~quo_abs + 1'b1) : quo_abs);
     wire [31:0] rem_signed = div_by_zero ? a             : (rem_sign ? (~rem_abs + 1'b1) : rem_abs);
 
-    // 无符号除法（直接使用原值）
+    // 无符号除法（仅 DIV/DIVU/REM/REMU 指令时激活）
     wire [63:0] divu_result;
-    assign divu_result = (b == 32'd0) ? {32'hFFFFFFFF, a} : restore_div(a, b);
+    assign divu_result = div_en ? ((b == 32'd0) ? {32'hFFFFFFFF, a} : restore_div(a, b)) : 64'd0;
     wire [31:0] divu_quo = divu_result[63:32];
     wire [31:0] divu_rem = divu_result[31:0];
 
