@@ -110,8 +110,8 @@ module cpu_core(
     wire [ 3:0] ram_wop;    // Controller→MREQ: 写类型
     wire        is_mul;     // Controller→core: 是否乘法
     wire        is_div;     // Controller→core: 是否除法
-    // 注意: mul_div_flag 多周期机制已移除，乘除法现为单周期组合逻辑
-    // is_mul/is_div 保留用于接口兼容，不再用于多周期控制
+    wire        is_mul_div; // 组合: 译码发现是乘除法指令
+    reg         mul_div_flag; // ★多周期标志★: 正在执行乘除法指令
 
     // --- 寄存器堆 ---
     wire [31:0] rf_rd1;     // RF→ALU A MUX: rs1的值
@@ -248,13 +248,20 @@ module cpu_core(
         else if (ld_st_done) ld_st_flag <= 1'b0;      // 访存完成，退出
     end
 
-    // 注意: mul_div_flag 多周期机制已移除。
-    // 乘除法现为单周期组合逻辑（Booth + 恢复余数），与其他ALU指令一样当拍完成。
+    // ----- mul_div_flag: 乘除法指令标志位 -----
+    // SET:   译码发现乘除法指令
+    // CLEAR: ALU 运算完成（busy 下降）
+    assign is_mul_div = is_mul | is_div;
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if      (cpu_rst)          mul_div_flag <= 1'b0;
+        else if (is_mul_div)       mul_div_flag <= 1'b1;       // 进入乘除法等待
+        else if (!mul_div_busy)    mul_div_flag <= 1'b0;       // 乘除法完成，退出
+    end
 
     // ----- 锁存多周期所需信息 -----
-    // 仅访存指令需要锁存（LOAD需要跨周期保持地址和读类型）
+    // 访存指令和乘除法指令都需要锁存（跨周期保持目标寄存器号）
     always @(posedge cpu_clk) begin
-        if (is_ld_st)
+        if (is_ld_st | is_mul_div)
             rf_wR_r <= inst[11:7];          // 缓存目标寄存器号 rd
     end
 
@@ -347,14 +354,16 @@ module cpu_core(
 
     // rf_we1: 最终的寄存器写使能
     //   LOAD指令: 等待DRAM返回(daccess_rvalid=1)
-    //   其他指令: 当拍完成（含乘除法，已改为单周期组合逻辑）
+    //   乘除法指令: 等待ALU完成(!mul_div_busy)
+    //   其他指令: 当拍完成
     assign rf_we1 = ld_st_flag   & daccess_rvalid                  // LOAD: 等待DRAM返回
-                  | ifetch_valid & rf_we & !is_ld_st;              // 所有非访存指令: 当拍完成
+                  | mul_div_flag & !mul_div_busy                   // 乘除法: 等待ALU完成
+                  | ifetch_valid & rf_we & !is_ld_st & !is_mul_div;// 其他指令: 当拍完成
 
     // rf_wR: 目标寄存器号
-    //   LOAD指令 → 用锁存值 rf_wR_r（因为 inst 已经没了）
+    //   LOAD/乘除法指令 → 用锁存值 rf_wR_r（因为 inst 已经没了）
     //   其他指令 → 直接用 inst[11:7]（当拍完成）
-    assign rf_wR  = ld_st_flag ? rf_wR_r : inst[11:7];
+    assign rf_wR  = (ld_st_flag | mul_div_flag) ? rf_wR_r : inst[11:7];
 
     // 写回数据MUX: 四选一
     //   {ld_st_flag, rf_wsel} 组合判断：
@@ -388,7 +397,8 @@ module cpu_core(
     //   2. 其他指令:   ifetch_valid=1 AND 不是访存（当拍完成，含乘除法）
 
     assign inst_finished = ld_st_flag   & ld_st_done                  // 访存指令完成
-                         | ifetch_valid & !is_ld_st;                  // 所有非访存指令当拍完成
+                         | mul_div_flag & !mul_div_busy               // 乘除法指令完成
+                         | ifetch_valid & !is_ld_st & !is_mul_div;    // 其他指令当拍完成
 
     // inst_finished_r: 延迟1拍，用于产生下一个 ifetch_req
     // 原因：inst_finished 在同一个周期既用于PC更新，又用于取指请求会产生时序问题

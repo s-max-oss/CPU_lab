@@ -59,6 +59,21 @@ module cpu_core(
     wire        stall;                      // 流水线阻塞（load-use + 多周期乘除法）
     wire        flush;                      // 分支跳转冲刷（EX 阶段产生）
 
+    // 前向声明: 以下信号定义在 IF_ID / ID_EX / EX / EX_MEM 阶段，
+    // 但 load-use / stall / forwarding 逻辑需要提前引用
+    wire [31:0] id_inst;                    // IF_ID 寄存器输出
+    wire        ex_rf_we;
+    wire [ 1:0] ex_rf_wsel;
+    wire [ 4:0] ex_rd_addr;
+    wire [ 3:0] ex_da_ren;
+    wire        ex_is_lui;                  // LUI 检测（EX 阶段，转发前向引用）
+    wire        mul_div_stall;              // 多周期乘除法停顿
+    reg         mul_div_flush;              // 乘除法完成后 1 周期气泡（驱动在 EX 段）
+    // EX_MEM 寄存器输出（EX/MEM 转发需要）
+    wire        mem_rf_we;
+    wire [ 4:0] mem_rd_addr;
+    wire [31:0] mem_alu_c;
+
     // Load-use 检测: EX 阶段是 load 且 ID 阶段使用其目标寄存器
     wire ex_is_load = ex_rf_we && (ex_rf_wsel == `WB_RAM);
     wire stall_load = ex_is_load && (ex_rd_addr != 5'h0) &&
@@ -95,15 +110,16 @@ module cpu_core(
             ex_was_load <= 1'b0;
     end
     wire load_wait = daccess_stall || ex_was_load;
-    assign stall = (stall_load || !ifetch_ready || load_wait) && !flush;
-    assign ifetch_addr = flush ? npc : (stall_load ? (pc - 32'd4) : (ifetch_ready ? npc : pc));
+    assign stall = (stall_load || !ifetch_ready || load_wait || mul_div_stall) && !flush;
+    assign ifetch_addr = flush ? npc : ((stall_load || mul_div_stall) ? (pc - 32'd4) : (ifetch_ready ? npc : pc));
 `else
-    assign stall = stall_load;
+    wire load_wait = 1'b0;  // 非 AXI 模式: 无 DCache 等待
+    assign stall = stall_load || mul_div_stall;
     assign ifetch_addr = stall ? (pc - 32'd4) : pc;
 `endif
 
     // ID/EX 控制信号
-    wire id_ex_flush = flush || stall_load;          // 分支跳转或 load-use → 插入气泡
+    wire id_ex_flush = flush || stall_load || mul_div_flush;  // 分支跳转/load-use/乘除完成 → 插入气泡
 
     // --- NPC 输入选择信号 ---
     wire [ 1:0] npc_op;
@@ -166,7 +182,12 @@ module cpu_core(
     wire if_clear = 1'b0;
 `endif
 
-    wire [31:0] id_pc, id_inst;
+    // flush 后 IROM 流水线内残留旧 PC 的数据，需额外冲刷 IF_ID 一周期
+    reg flush_d1;
+    always @(posedge cpu_clk or posedge cpu_rst)
+        flush_d1 <= cpu_rst ? 1'b0 : flush;
+
+    wire [31:0] id_pc;  // id_inst forward-declared at top for load-use detection
 
     IF_ID_Reg U_IF_ID (
         .clk      (cpu_clk),
@@ -248,21 +269,21 @@ module cpu_core(
 
     // --- ID/EX 流水线寄存器 ---
     wire [31:0] ex_pc, ex_rD1, ex_rD2, ex_ext, ex_pc4;
-    wire [ 4:0] ex_rs1_addr, ex_rs2_addr, ex_rd_addr;
+    wire [ 4:0] ex_rs1_addr, ex_rs2_addr;
     wire [ 1:0] ex_npc_op;
     wire [ 4:0] ex_alu_op;
     wire        ex_alua_sel, ex_alub_sel;
     wire [ 2:0] ex_sext_op;
     wire [ 2:0] ex_ram_rop;
     wire [ 3:0] ex_ram_wop;
-    wire        ex_rf_we;
-    wire [ 1:0] ex_rf_wsel;
+    // ex_rf_we, ex_rf_wsel, ex_rd_addr: forward-declared for load-use detection
+    // ex_rf_wsel forward-declared at top for load-use detection
 
     ID_EX_Reg U_ID_EX (
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (id_ex_flush),
-        .stall          (stall_load || load_wait),
+        .stall          (stall_load || load_wait || mul_div_stall),
         .pc_in          (id_pc),
         .rD1_in         (id_rD1_fwd),
         .rD2_in         (id_rD2_fwd),
@@ -328,7 +349,7 @@ module cpu_core(
 
     // ALU 操作数 MUX（含转发）
     // LUI 的 inst[19:15] 是立即数的一部分，不可作为 rs1 读取；ALU A 应为 0
-    wire ex_is_lui = (ex_rf_wsel == `WB_EXT);
+    assign ex_is_lui = (ex_rf_wsel == `WB_EXT);  // forward-declared at top
 `ifdef USE_AXI
     wire [31:0] ex_alu_a_raw = ex_alua_sel ? ex_pc : (ex_is_lui ? 32'd0 : ex_rD1);
 `else
@@ -341,14 +362,48 @@ module cpu_core(
 
     wire [31:0] ex_alu_c;
     wire        ex_br;
+    wire        ex_alu_busy;       // ALU 忙标志（乘除法多周期）
+    wire        ex_alu_done;       // ALU 完成脉冲（乘除法，1 周期）
 
     ALU U_ALU (
+        .rst    (cpu_rst),
+        .clk    (cpu_clk),
         .op     (ex_alu_op),
         .a      (ex_alu_a),
         .b      (ex_alu_b),
         .br     (ex_br),
-        .c      (ex_alu_c)
+        .c      (ex_alu_c),
+        .busy   (ex_alu_busy),
+        .done   (ex_alu_done)
     );
+
+    // ---- 多周期乘除法停顿逻辑 ----
+    // EX 阶段检测乘除法指令
+    wire ex_is_mul_div = (ex_alu_op == `ALU_MUL)  || (ex_alu_op == `ALU_MULH) ||
+                         (ex_alu_op == `ALU_MULHU) || (ex_alu_op == `ALU_DIV)  ||
+                         (ex_alu_op == `ALU_DIVU)  || (ex_alu_op == `ALU_REM)  ||
+                         (ex_alu_op == `ALU_REMU);
+
+    // 启动检测: MUL/DIV 进入 EX 的第 1 拍，busy 尚未被 multiplier/divider 确认
+    // 此周期需阻塞 EX_MEM/MEM_WB，防止 ALU 输出错误的 ADD 结果（op_r 未更新）
+    wire ex_mul_div_starting = ex_is_mul_div && !ex_alu_busy && !ex_alu_done && !mul_div_flush;
+
+    // done: 乘除法器内部产生（multiplier/divider 模块同一 always 块内边缘检测，确定性强）
+    // done=1 时 ex_alu_c 仍保持 MUL/DIV 结果（ALU 的 effective_op 冻结在 op_r）
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if (cpu_rst)
+            mul_div_flush <= 1'b0;
+        else if (ex_alu_done)
+            mul_div_flush <= 1'b1;     // 乘除法完成 → 下一拍插入气泡
+        else
+            mul_div_flush <= 1'b0;
+    end
+
+    // 停顿条件: 正在计算 || 启动周期 || 完成脉冲 || 气泡周期
+    // 启动周期阻塞前端防止下一 MUL/DIV 提前进入 EX
+    assign mul_div_stall = (ex_is_mul_div && ex_alu_busy) || ex_mul_div_starting || ex_alu_done || mul_div_flush;
+    // EX/MEM 和 MEM/WB: 计算、启动周期停顿；done 和 flush 周期不阻塞（让结果流出）
+    wire mem_stall = load_wait || (ex_is_mul_div && ex_alu_busy) || ex_mul_div_starting;
 
     // 分支重定向
     wire ex_branch_taken = (ex_npc_op == `NPC_BRA) && ex_br;
@@ -365,11 +420,6 @@ module cpu_core(
     wire [31:0] ex_real_pc = ex_pc - 32'd4;
 `endif
 
-    // flush 后 IROM 流水线内残留旧 PC 的数据，需额外冲刷 IF_ID 一周期
-    reg flush_d1;
-    always @(posedge cpu_clk or posedge cpu_rst)
-        flush_d1 <= cpu_rst ? 1'b0 : flush;
-
     assign npc_op        = flush ? ex_npc_op    : `NPC_PC4;
     assign npc_pc        = flush ? ex_real_pc   : pc;
     assign npc_offset    = flush ? ex_ext       : 32'h0;
@@ -377,7 +427,7 @@ module cpu_core(
     assign npc_jmp_target = flush ? ex_alu_c    : 32'h0;
 
     // --- MREQ（在 EX 阶段生成访存请求，MEM 阶段使用） ---
-    wire [ 3:0] ex_da_ren;
+    // ex_da_ren forward-declared at top for load-wait pre-detection
     wire [ 3:0] ex_da_wen;
     wire [31:0] ex_da_wdata;
 
@@ -393,20 +443,19 @@ module cpu_core(
     );
 
     // --- EX/MEM 流水线寄存器 ---
-    wire [31:0] mem_alu_c, mem_rD2, mem_pc4;
+    // mem_alu_c, mem_rd_addr, mem_rf_we: forward-declared at top for EX/MEM forwarding
+    wire [31:0] mem_rD2, mem_pc4;
     wire        mem_br;
-    wire [ 4:0] mem_rd_addr;
     wire [ 1:0] mem_npc_op;
     wire [ 2:0] mem_ram_rop;
     wire [ 3:0] mem_ram_wop;
-    wire        mem_rf_we;
     wire [ 1:0] mem_rf_wsel;
 
     EX_MEM_Reg U_EX_MEM (
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (1'b0),
-        .stall          (load_wait),
+        .stall          (mem_stall),
         .alu_c_in       (ex_alu_c),
         .rD2_in         (ex_rD2),
         .pc4_in         (ex_pc4),
@@ -457,7 +506,7 @@ module cpu_core(
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (1'b0),
-        .stall          (load_wait),
+        .stall          (mem_stall),
         .alu_c_in       (mem_alu_c),
         .ram_ext_in     (32'h0),                 // 未使用（MEXT 在 WB）
         .pc4_in         (mem_pc4),

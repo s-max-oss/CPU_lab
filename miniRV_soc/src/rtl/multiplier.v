@@ -1,45 +1,84 @@
 // ============================================================================
-// multiplier.v — 乘法器（参数化位宽）
+// multiplier.v — 参数化乘法器（多周期，移位相加）
 // ============================================================================
-// 【功能】带符号扩展的乘法运算
-// 【实现方式】直接用 Verilog 的 * 运算符，让综合器自动推断乘法器
-//   - 对于 FPGA: 综合为 DSP 硬核乘法器（高性能）或 LUT 乘法器（节省资源）
-//   - 对于仿真: 直接调用仿真器的乘法运算
-//
-// 【符号处理技巧】
-//   输入 x, y 先做符号扩展（重复最高位到 2*WIDTH），然后再做乘法
-//   例如 WIDTH=32: x_s = { {32{x[31]}}, x }  → 扩展到64位
-//   例如 WIDTH=33（无符号用法）: x_s = {1'b0, x} → 高位补0，强制无符号乘法
-//   这样无论输入是 $signed 还是 $unsigned，都能得到正确结果
-//
-// 【注意】本设计中 busy 直接接0（单周期完成），但保留了 busy 接口以便
-//   未来替换为多周期流水线乘法器（如果FPGA频率太高，DSP可能无法单周期完成）
+// 【算法】移位相加乘法（shift-add），每次迭代 1 位
+// 【时序】1 周期加载 + WIDTH 周期迭代 + 1 周期写回 ≈ WIDTH+2 周期
+//   - start 脉冲启动（1 拍有效）
+//   - busy 有效期间表示正在计算
+//   - busy 下降沿表示结果 z 有效
+// 【关键路径】1 次 WIDTH+1 位加法 ≈ 3-4ns，轻松满足 25-50MHz
+// 【符号处理】取绝对值相乘，最后根据输入符号调整结果符号
+//   - 有符号: x, y 均为补码，取绝对值后做无符号乘法，结果按符号位取反
+//   - 无符号: 零扩展输入（MSB=0），绝对值不变，结果即为无符号积
+// 【参数化】WIDTH 可配置，O_WID = 2*WIDTH
 // ============================================================================
 
 `timescale 1ns / 1ps
 
 module multiplier #(
-    parameter WIDTH = 32              // 操作数位宽，默认32
+    parameter WIDTH = 32,
+    parameter O_WID = 2 * WIDTH
 )(
-    input  wire        clk,
-    input  wire        rst,
-    input  wire [WIDTH-1:0] x,        // 被乘数
-    input  wire [WIDTH-1:0] y,        // 乘数
-    input  wire        start,         // 启动信号（上升沿触发）
-    output reg  [2*WIDTH-1:0] z,      // 乘积（位宽 = 2*WIDTH）
-    output wire        busy           // 忙标志（本设计恒为0）
+    input  wire                 clk,
+    input  wire                 rst,
+    input  wire [WIDTH-1:0]     x,
+    input  wire [WIDTH-1:0]     y,
+    input  wire                 start,
+    output reg  [O_WID-1:0]     z,
+    output wire                 busy,
+    output reg                  done
 );
 
-    assign busy = 1'b0;               // 组合逻辑，不需要等待
+    localparam COUNT_W = WIDTH <= 2 ? 1 : $clog2(WIDTH);
+
+    reg [O_WID-1:0]     multiplicand;
+    reg [WIDTH-1:0]     multiplier_r;
+    reg [O_WID-1:0]     accumulator;
+    reg [COUNT_W-1:0]   count;
+    reg                 result_negative;
+    reg                 busy_r;
+
+    wire [WIDTH-1:0]    x_magnitude = x[WIDTH-1] ? (~x + {{WIDTH-1{1'b0}}, 1'b1}) : x;
+    wire [WIDTH-1:0]    y_magnitude = y[WIDTH-1] ? (~y + {{WIDTH-1{1'b0}}, 1'b1}) : y;
+    wire [O_WID-1:0]    accumulator_next = accumulator
+                            + (multiplier_r[0] ? multiplicand : {O_WID{1'b0}});
+
+    assign busy = busy_r;
 
     always @(posedge clk or posedge rst) begin
-        if (rst)
-            z <= 0;
-        else if (start)
-            // 符号扩展后相乘：
-            //   { {WIDTH{x[WIDTH-1]}}, x } 意思是"用x的最高位重复WIDTH次，然后接x"
-            //   例如 x=8'hFF(-1), WIDTH=8 → 扩展为 16'hFFFF
-            z <= {{WIDTH{x[WIDTH-1]}}, x} * {{WIDTH{y[WIDTH-1]}}, y};
+        if (rst) begin
+            z               <= {O_WID{1'b0}};
+            multiplicand    <= {O_WID{1'b0}};
+            multiplier_r    <= {WIDTH{1'b0}};
+            accumulator     <= {O_WID{1'b0}};
+            count           <= {COUNT_W{1'b0}};
+            result_negative <= 1'b0;
+            busy_r          <= 1'b0;
+            done            <= 1'b0;
+        end else begin
+            done <= 1'b0;  // 默认清零（单周期脉冲）
+            if (start && !busy_r && !done) begin
+                multiplicand    <= {{WIDTH{1'b0}}, x_magnitude};
+                multiplier_r    <= y_magnitude;
+                accumulator     <= {O_WID{1'b0}};
+                count           <= {COUNT_W{1'b0}};
+                result_negative <= x[WIDTH-1] ^ y[WIDTH-1];
+                busy_r          <= 1'b1;
+            end else if (busy_r) begin
+                if (count == WIDTH - 1) begin
+                    z <= result_negative
+                        ? (~accumulator_next + {{O_WID-1{1'b0}}, 1'b1})
+                        : accumulator_next;
+                    busy_r <= 1'b0;
+                    done   <= 1'b1;  // 完成脉冲
+                end else begin
+                    accumulator  <= accumulator_next;
+                    multiplicand <= multiplicand << 1;
+                    multiplier_r <= multiplier_r >> 1;
+                    count        <= count + 1'b1;
+                end
+            end
+        end
     end
 
 endmodule
