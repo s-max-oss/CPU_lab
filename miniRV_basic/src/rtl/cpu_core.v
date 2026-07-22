@@ -4,11 +4,10 @@
 // 【模块职责】连接所有数据通路子模块（PC、NPC、Controller、RF、SEXT、ALU、MREQ、MEXT），
 //   协调5级流水线的数据流动，处理多周期指令（访存/乘除）的等待和写回。
 //
-// 【总体架构 — 伪5级流水线（单周期+多周期混合）】
-//   本CPU本质上是一个 单周期CPU（每条指令1拍完成），但在此基础之上
-//   增加了对两类"慢指令"的多周期支持：
+// 【总体架构 — 单周期CPU（访存指令多周期）】
+//   本CPU核心是一个 单周期CPU（每条指令1拍完成），但增加了对访存指令的多周期支持：
 //     - 访存指令（LOAD/STORE）：需要等 DRAM 返回数据
-//     - 乘除指令（MUL/DIV）：需要等乘法器/除法器完成运算
+//   注意: 乘除法（MUL/DIV）已改为单周期组合逻辑（Booth + 恢复余数），当拍完成
 //
 //   ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐
 //   │  IF  │ → │  ID  │ → │  EX  │ → │ MEM  │ → │  WB  │
@@ -17,14 +16,13 @@
 //       ↑                                                    ↓
 //       └──────────── inst_finished 控制节奏 ─────────────────┘
 //
-//   对于 ADD/ADDI 等简单指令：IF→ID→EX→WB 在1拍内完成（无MEM阶段）
+//   对于 ADD/ADDI/MUL/DIV 等ALU指令：IF→ID→EX→WB 在1拍内完成（无MEM阶段）
 //   对于 LW 等访存指令：IF→ID→EX→MEM(等待DRAM) → WB（多拍）
-//   对于 MUL/DIV 等乘除：IF→ID→EX(等待运算器)→WB（多拍）
 //
-// 【最关键的3个控制信号】
+// 【最关键的2个控制信号】
 //   1. inst_finished: 指令执行完毕 → 允许PC更新取下一条
 //   2. ld_st_flag:    正在执行访存指令 → 阻塞新的取指、走多周期写回路径
-//   3. mul_div_flag:  正在执行乘除指令 → 阻塞新的取指、走多周期写回路径
+//   注意: 乘除法已改为单周期组合逻辑，不再需要 mul_div_flag 多周期控制
 //
 // 【多周期控制精要 — 理解重点！！！】
 //   挑战：简单指令1拍完成，访存/乘除需要多拍。如何统一管理？
@@ -35,10 +33,8 @@
 //     CLEAR: 当 ld_st_done = 1（DRAM返回数据 或 写入完成）
 //     效果:  阻塞 inst_finished，PC不更新，写回走 ram_ext 路径
 //
-//   mul_div_flag:
-//     SET:   当 is_mul_div = 1（指令译码发现是乘除指令）
-//     CLEAR: 当 mul_div_busy = 0（乘法器/除法器运算完成）
-//     效果:  阻塞 inst_finished，PC不更新，写回走 alu_c 路径
+//   注意: mul_div_flag 已移除，乘除法现为单周期组合逻辑（Booth + 恢复余数），
+//   与其他ALU指令一样当拍完成，无需多周期等待。
 //
 //   rf_wR_r / alu_c_r / ram_rop_r 缓存:
 //     因为多周期指令需要跨越多个时钟周期，但 inst 只维持1拍（ifetch_valid仅1拍）
@@ -112,10 +108,10 @@ module cpu_core(
     wire [ 2:0] ram_rop;    // Controller→MREQ: 读类型
     reg  [ 2:0] ram_rop_r;  //   锁存版→MEXT: 跨周期读类型（LOAD多周期时要保持）
     wire [ 3:0] ram_wop;    // Controller→MREQ: 写类型
-    wire        is_mul;     // Controller→core: 是否乘法（触发 mul_div_flag）
-    wire        is_div;     // Controller→core: 是否除法（触发 mul_div_flag）
-    wire        is_mul_div; // 组合: is_mul | is_div
-    reg         mul_div_flag;// ★多周期标志1★: 正在执行乘除法指令
+    wire        is_mul;     // Controller→core: 是否乘法
+    wire        is_div;     // Controller→core: 是否除法
+    // 注意: mul_div_flag 多周期机制已移除，乘除法现为单周期组合逻辑
+    // is_mul/is_div 保留用于接口兼容，不再用于多周期控制
 
     // --- 寄存器堆 ---
     wire [31:0] rf_rd1;     // RF→ALU A MUX: rs1的值
@@ -252,21 +248,13 @@ module cpu_core(
         else if (ld_st_done) ld_st_flag <= 1'b0;      // 访存完成，退出
     end
 
-    // ----- mul_div_flag: 乘除指令标志位 -----
-    // SET:   译码发现乘除指令
-    // CLEAR: ALU报告运算完成（mul_div_busy=0）
-    assign is_mul_div = is_mul | is_div;
-    always @(posedge cpu_clk or posedge cpu_rst) begin
-        if      (cpu_rst)       mul_div_flag <= 1'b0;
-        else if (is_mul_div)    mul_div_flag <= 1'b1;   // 进入乘除等待
-        else if (!mul_div_busy) mul_div_flag <= 1'b0;   // 运算完成，退出
-    end
+    // 注意: mul_div_flag 多周期机制已移除。
+    // 乘除法现为单周期组合逻辑（Booth + 恢复余数），与其他ALU指令一样当拍完成。
 
     // ----- 锁存多周期所需信息 -----
-    // 原因：ifetch_valid 只有1拍，下周期 inst 就变成 NOP 了。
-    // 所以要把目标寄存器号在 valid 那拍存下来。
+    // 仅访存指令需要锁存（LOAD需要跨周期保持地址和读类型）
     always @(posedge cpu_clk) begin
-        if (is_ld_st | is_mul_div)
+        if (is_ld_st)
             rf_wR_r <= inst[11:7];          // 缓存目标寄存器号 rd
     end
 
@@ -352,22 +340,21 @@ module cpu_core(
     //   简单指令     | ifetch_valid=1 当拍    | alu_c    | inst[11:7]
     //              |                        | pc4/ext  |
     //   LOAD指令    | daccess_rvalid=1 时     | ram_ext  | rf_wR_r(锁存)
-    //   乘除指令     | mul_div_busy=0 时       | alu_c    | rf_wR_r(锁存)
     //
     // 写使能 rf_we1 的逻辑（见下方assign）：
-    //   - 简单指令: 取到指令且不是访存/乘除 → 当拍写回
     //   - LOAD指令: 正在访存(ld_st_flag=1)且数据回来了(有效)
-    //   - 乘除指令: 正在乘除(mul_div_flag=1)且运算完成了(busy=0)
+    //   - 其他指令: 取到指令即可写回（含乘除法，已改为单周期）
 
     // rf_we1: 最终的寄存器写使能
+    //   LOAD指令: 等待DRAM返回(daccess_rvalid=1)
+    //   其他指令: 当拍完成（含乘除法，已改为单周期组合逻辑）
     assign rf_we1 = ld_st_flag   & daccess_rvalid                  // LOAD: 等待DRAM返回
-                  | mul_div_flag & !mul_div_busy                   // 乘除: 等待运算完成
-                  | ifetch_valid & rf_we & !is_ld_st & !is_mul_div;// 简单指令: 当拍完成
+                  | ifetch_valid & rf_we & !is_ld_st;              // 所有非访存指令: 当拍完成
 
     // rf_wR: 目标寄存器号
-    //   多周期指令 → 用锁存值 rf_wR_r（因为 inst 已经没了）
-    //   简单指令   → 直接用 inst[11:7]
-    assign rf_wR  = ld_st_flag | mul_div_flag ? rf_wR_r : inst[11:7];
+    //   LOAD指令 → 用锁存值 rf_wR_r（因为 inst 已经没了）
+    //   其他指令 → 直接用 inst[11:7]（当拍完成）
+    assign rf_wR  = ld_st_flag ? rf_wR_r : inst[11:7];
 
     // 写回数据MUX: 四选一
     //   {ld_st_flag, rf_wsel} 组合判断：
@@ -396,16 +383,12 @@ module cpu_core(
     //   - PC可以更新到npc
     //   - 可以取下一条指令了
     //
-    // 三种完成条件（任一满足即可）：
+    // 两种完成条件（任一满足即可）：
     //   1. 访存完成:   ld_st_flag=1 AND ld_st_done=1（DRAM返回了数据或写入完成）
-    //   2. 乘除完成:   mul_div_flag=1 AND mul_div_busy=0（运算器空闲了）
-    //   3. 简单指令:   ifetch_valid=1 AND 不是访存 AND 不是乘除（1拍完成）
-    //
-    // 注意：条件1和2互斥（一个时刻只能执行一种多周期指令），条件3与前两者也互斥
+    //   2. 其他指令:   ifetch_valid=1 AND 不是访存（当拍完成，含乘除法）
 
     assign inst_finished = ld_st_flag   & ld_st_done                  // 访存指令完成
-                         | mul_div_flag & !mul_div_busy               // 乘除指令完成
-                         | ifetch_valid & !is_ld_st & !is_mul_div;    // 简单指令当拍完成
+                         | ifetch_valid & !is_ld_st;                  // 所有非访存指令当拍完成
 
     // inst_finished_r: 延迟1拍，用于产生下一个 ifetch_req
     // 原因：inst_finished 在同一个周期既用于PC更新，又用于取指请求会产生时序问题
