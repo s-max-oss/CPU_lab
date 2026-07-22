@@ -1,11 +1,12 @@
 # ===== Vivado Project =====
-# Vivado generated directories (keep only .srcs and .xpr)
+# Vivado generated directories (keep only source files)
 *.cache/
 *.hw/
 *.ip_user_files/
 *.runs/
 *.sim/
 *.gen/
+*.srcs/
 *.jou
 *.log
 *.str
@@ -13,10 +14,30 @@
 *.backup.jou
 *.backup.log
 
-# Vivado IP temp files
+# Vivado IP temp files (keep .xci only -- the rest is regeneratable)
 *_sim_netlist.v
+*_sim_netlist.vhdl
 *_stub.v
+*_stub.vhdl
 *_stub.sv
+*.veo
+*.vho
+*.dcp
+*.xo
+*.edn
+*.ngc
+# IP-generated directories & files (keep only .xci)
+**/ip/**/doc/
+**/ip/**/hdl/
+**/ip/**/misc/
+**/ip/**/sim/
+**/ip/**/simulation/
+**/ip/**/synth/
+**/ip/**/src/
+**/ip/**/*.xml
+**/ip/**/*.xdc
+**/ip/**/*.rpt
+**/ip/**/check_props.tcl
 
 # Vivado synthesized/netlist files (not source)
 *_funcsim.v
@@ -30,7 +51,6 @@
 .Xil/
 
 # ===== Simulation =====
-# Compiled simulation libs
 xsim.dir/
 *.wdb
 *.wcfg
@@ -43,14 +63,13 @@ xsim.dir/
 *.fst
 
 # ===== Build/Output =====
+*.xpr
 *.bit
 *.bin
 *.mcs
 *.prm
 *.ltx
-*.dcp
 *.edf
-*.ngc
 *.ngd
 *.twr
 *.twx
@@ -58,6 +77,21 @@ xsim.dir/
 *.drc
 *.xrpt
 *.rpt
+*.hex
+*.mif
+*.coe
+usage_statistics_webtalk.*
+*.webtalk*
+*_webtalk.*
+.hbs/
+.simon/
+project_timing_summary.rpt
+*.debug_session_logs/
+*.debug_logs/
+
+# Template / temporary scripts
+pre_bitstream.tcl
+_run_sim.tcl
 
 # Vivado SDK / Vitis
 *.elf
@@ -68,6 +102,15 @@ xsim.dir/
 *.ld
 *.fsbl
 
+# ===== Debug scripts =====
+_debug/
+
+# ===== Temp / Playwright =====
+.playwright-mcp/
+page-snapshot.yml
+__pycache__/
+*.pyc
+
 # ===== OS files =====
 Thumbs.db
 .DS_Store
@@ -76,19 +119,8 @@ Desktop.ini
 *.swo
 *~
 
-# ===== Temp / Playwright =====
-.playwright-mcp/
-page-snapshot.yml
-__pycache__/
-*.pyc
-
 # ===== Editors =====
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
-
-# ===== Large reference files (keep in cloud/separate) =====
-# PDFs > 50MB and large docx can be optionally ignored
-# Uncomment if needed:
-# ref/exam-materials/期末复习资料.pdf
