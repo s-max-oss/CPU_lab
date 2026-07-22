@@ -11,6 +11,7 @@ module EX_MEM_Reg (
     input  wire         clk,
     input  wire         rst,
     input  wire         flush,
+    input  wire         stall,
 
     // 数据通路
     input  wire [31:0]  alu_c_in,
@@ -52,7 +53,7 @@ module EX_MEM_Reg (
             ram_wop_out  <= 4'b0;   // N
             rf_we_out    <= 1'b0;
             rf_wsel_out  <= 2'b0;
-        end else begin
+        end else if (!stall) begin
             alu_c_out    <= alu_c_in;
             rD2_out      <= rD2_in;
             pc4_out      <= pc4_in;

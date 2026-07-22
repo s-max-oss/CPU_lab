@@ -130,8 +130,9 @@ module ALU (
     // 余数符号：被除数
     wire rem_sign = a[31];
 
-    wire [31:0] quo_signed = quo_sign ? (~quo_abs + 1'b1) : quo_abs;
-    wire [31:0] rem_signed = rem_sign ? (~rem_abs + 1'b1) : rem_abs;
+    // 除零时：商 = -1（无需符号调整），余数 = 被除数本身
+    wire [31:0] quo_signed = div_by_zero ? 32'hFFFFFFFF : (quo_sign ? (~quo_abs + 1'b1) : quo_abs);
+    wire [31:0] rem_signed = div_by_zero ? a             : (rem_sign ? (~rem_abs + 1'b1) : rem_abs);
 
     // 无符号除法（直接使用原值）
     wire [63:0] divu_result;

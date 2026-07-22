@@ -11,6 +11,7 @@ module MEM_WB_Reg (
     input  wire         clk,
     input  wire         rst,
     input  wire         flush,
+    input  wire         stall,
 
     // 数据通路
     input  wire [31:0]  alu_c_in,
@@ -45,7 +46,7 @@ module MEM_WB_Reg (
             rf_wsel_out   <= 2'b0;
             ram_rop_out   <= 3'b0;
             byte_offs_out <= 2'b0;
-        end else begin
+        end else if (!stall) begin
             alu_c_out     <= alu_c_in;
             ram_ext_out   <= ram_ext_in;
             pc4_out       <= pc4_in;

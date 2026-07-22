@@ -135,17 +135,31 @@ module ICache(
         end else begin
             case (state)
                 IDLE: begin
-                    inst_valid <= 1'b0;
-                    cpu_ren    <= (inst_rreq & dev_rrdy) ? 4'hF : 4'h0;
-                    cpu_raddr  <= inst_rreq ? inst_addr : 32'h0;
+                    if (inst_rreq) begin
+                        inst_valid <= 1'b0;
+                        cpu_ren    <= dev_rrdy ? 4'hF : 4'h0;
+                        cpu_raddr  <= inst_addr;
+                    end else begin
+                        cpu_ren    <= 4'h0;
+                        // hold inst_valid during pipeline stall
+                    end
                 end
                 STAT0: begin
                     cpu_ren    <= dev_rrdy ? 4'hF : 4'h0;
                 end
                 STAT1: begin
-                    cpu_ren    <= 4'h0;
-                    inst_valid <= dev_rvalid ? 1'b1 : 1'b0;
-                    inst_out   <= dev_rvalid ? dev_rdata[31:0] : 32'h0;
+                    // 保持 cpu_ren 直到 axi_master 确认 (!dev_rrdy) 或数据到达
+                    if (dev_rvalid) begin
+                        cpu_ren    <= 4'h0;
+                        inst_valid <= 1'b1;
+                        inst_out   <= dev_rdata[31:0];
+                    end else if (!dev_rrdy) begin
+                        cpu_ren    <= 4'h0;
+                        inst_valid <= 1'b0;
+                    end else begin
+                        cpu_ren    <= 4'hF;
+                        inst_valid <= 1'b0;
+                    end
                 end
                 default: begin
                     inst_valid <= 1'b0;

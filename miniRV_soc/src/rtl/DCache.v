@@ -11,6 +11,7 @@ module DCache(
     input  wire [31:0]  data_addr,
     output reg          data_valid,
     output reg  [31:0]  data_rdata,
+    output reg          data_stall,     // 直通模式: 读等待期间拉高, 供 CPU 阻塞流水线
     input  wire [ 3:0]  data_wen,
     input  wire [31:0]  data_wdata,
     output reg          data_wresp,
@@ -75,16 +76,6 @@ module DCache(
         end
     end
 
-    // DEBUG: trace data_valid assertion
-    always @(posedge cpu_clk) begin
-        if (data_valid && !uncached_valid) begin
-            $display("[DCACHE] data_valid=1 addr=0x%08x rdata=0x%08x state=%d offset=%d",
-                     data_addr, data_rdata, r_state, offset);
-            $display("[DCACHE] cache_line: valid=%d tag=0x%x data[31:0]=0x%08x",
-                     cache_line_r[133], cache_line_r[132:128], cache_line_r[31:0]);
-        end
-    end
-
     reg  [127:0] modified_data;
     always @(*) begin
         modified_data = cache_line_r[127:0];
@@ -119,13 +110,6 @@ module DCache(
     wire [133:0] wr_cache_data = {1'b1, tag_from_cpu, modified_data};
 
     wire cache_we = ((r_state == R_REFILL) && dev_rvalid) || (w_state == W_TAG_CHECK);
-
-    // DEBUG: trace refill write
-    always @(posedge cpu_clk) begin
-        if ((r_state == R_REFILL) && dev_rvalid)
-            $display("[DCACHE] REFILL complete: addr=0x%08x tag=0x%x idx=%d dev_rdata[31:0]=0x%08x",
-                     data_addr, tag_from_cpu, cache_index, dev_rdata[31:0]);
-    end
 
     wire [133:0] cache_line_w = ((r_state == R_REFILL) && dev_rvalid)
                                 ? {1'b1, tag_from_cpu, dev_rdata}
@@ -171,13 +155,6 @@ module DCache(
         endcase
     end
 
-    // DEBUG: trace state transitions
-    always @(posedge cpu_clk) begin
-        if (r_state != r_nstat)
-            $display("[DCACHE] r_state: %d -> %d (hit_r=%d dev_rvalid=%d data_ren=%x)",
-                     r_state, r_nstat, hit_r, dev_rvalid, data_ren);
-    end
-
     // Read FSM output logic
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
@@ -187,6 +164,7 @@ module DCache(
             ren_saved      <= 4'h0;
             uncached_valid <= 1'b0;
             uncached_rdata <= 32'h0;
+            data_stall     <= 1'b0;
         end else begin
             uncached_valid <= 1'b0;
             case (r_state)
@@ -306,14 +284,17 @@ module DCache(
     localparam R_STAT1 = 2'b11;
     reg [1:0] r_state, r_nstat;
     reg [3:0] ren_r;
+    reg [31:0] saved_raddr;   // 记录当前悬挂读的地址, 用于检测新请求
 
     always @(posedge cpu_clk or posedge cpu_rst) begin
         r_state <= cpu_rst ? R_IDLE : r_nstat;
     end
 
+    // R_IDLE: 仅当无有效数据悬挂时发起新读; data_valid 保持到 CPU 消费
+    // 地址变化时作废旧数据并启动新读 (处理背靠背 load)
     always @(*) begin
         case (r_state)
-            R_IDLE:  r_nstat = (|data_ren) ? (dev_rrdy ? R_STAT1 : R_STAT0) : R_IDLE;
+            R_IDLE:  r_nstat = ((|data_ren) && (!data_valid || (data_addr != saved_raddr))) ? (dev_rrdy ? R_STAT1 : R_STAT0) : R_IDLE;
             R_STAT0: r_nstat = dev_rrdy ? R_STAT1 : R_STAT0;
             R_STAT1: r_nstat = dev_rvalid ? R_IDLE : R_STAT1;
             default: r_nstat = R_IDLE;
@@ -322,31 +303,51 @@ module DCache(
 
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
-            data_valid <= 1'b0;
-            cpu_ren    <= 4'h0;
+            data_valid   <= 1'b0;
+            data_stall   <= 1'b0;
+            cpu_ren      <= 4'h0;
+            saved_raddr  <= 32'h0;
         end else begin
             case (r_state)
                 R_IDLE: begin
-                    data_valid <= 1'b0;
-                    if (|data_ren) begin
+                    if (|data_ren && (!data_valid || (data_addr != saved_raddr))) begin
+                        data_valid  <= 1'b0;
+                        data_stall  <= 1'b1;
+                        ren_r       <= data_ren;
                         if (dev_rrdy)
                             cpu_ren <= data_ren;
                         else
-                            ren_r   <= data_ren;
-                        cpu_raddr <= data_addr;
-                    end else
-                        cpu_ren   <= 4'h0;
+                            cpu_ren <= 4'h0;
+                        cpu_raddr   <= data_addr;
+                        saved_raddr <= data_addr;
+                    end else if (!(|data_ren)) begin
+                        data_valid  <= 1'b0;
+                        data_stall  <= 1'b0;
+                        cpu_ren     <= 4'h0;
+                    end else begin
+                        data_stall  <= 1'b0;
+                        cpu_ren <= 4'h0;
+                    end
                 end
                 R_STAT0: begin
                     cpu_ren    <= dev_rrdy ? ren_r : 4'h0;
                 end
                 R_STAT1: begin
-                    cpu_ren    <= 4'h0;
-                    data_valid <= dev_rvalid ? 1'b1 : 1'b0;
-                    data_rdata <= dev_rvalid ? dev_rdata : 32'h0;
+                    // 保持 cpu_ren 直到 axi_master 确认 (!dev_rrdy) 或数据到达
+                    if (dev_rvalid) begin
+                        cpu_ren    <= 4'h0;
+                        data_valid <= 1'b1;
+                        data_rdata <= dev_rdata;
+                        data_stall <= 1'b0;
+                    end else if (!dev_rrdy) begin
+                        cpu_ren    <= 4'h0;
+                    end else begin
+                        cpu_ren    <= ren_r;
+                    end
                 end
                 default: begin
                     data_valid <= 1'b0;
+                    data_stall <= 1'b0;
                     cpu_ren    <= 4'h0;
                 end
             endcase
@@ -382,12 +383,13 @@ module DCache(
                 W_IDLE: begin
                     data_wresp <= 1'b0;
                     if (|data_wen) begin
+                        wen_r      <= data_wen;
+                        cpu_waddr  <= data_addr;
+                        cpu_wdata  <= data_wdata;
                         if (dev_wrdy)
                             cpu_wen <= data_wen;
                         else
-                            wen_r   <= data_wen;
-                        cpu_waddr  <= data_addr;
-                        cpu_wdata  <= data_wdata;
+                            cpu_wen <= 4'h0;
                     end else
                         cpu_wen    <= 4'h0;
                 end
@@ -395,8 +397,17 @@ module DCache(
                     cpu_wen    <= dev_wrdy ? wen_r : 4'h0;
                 end
                 W_STAT1: begin
-                    cpu_wen    <= 4'h0;
-                    data_wresp <= wr_resp ? 1'b1 : 1'b0;
+                    // 保持 cpu_wen 直到 axi_master 确认 (!dev_wrdy)
+                    if (wr_resp) begin
+                        cpu_wen    <= 4'h0;
+                        data_wresp <= 1'b1;
+                    end else if (!dev_wrdy) begin
+                        cpu_wen    <= 4'h0;
+                        data_wresp <= 1'b0;
+                    end else begin
+                        cpu_wen    <= wen_r;
+                        data_wresp <= 1'b0;
+                    end
                 end
                 default: begin
                     data_wresp <= 1'b0;

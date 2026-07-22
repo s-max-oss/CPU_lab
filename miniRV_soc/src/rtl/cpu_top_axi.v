@@ -77,6 +77,7 @@ module cpu_top_axi(
     wire [31:0] cpu2dc_addr;
     wire        dc2cpu_valid;
     wire [31:0] dc2cpu_rdata;
+    wire        dc2cpu_stall;
     wire [ 3:0] cpu2dc_wen;
     wire [31:0] cpu2dc_wdata;
     wire        dc2cpu_wresp;
@@ -95,8 +96,9 @@ module cpu_top_axi(
         .daccess_addr   (cpu2dc_addr),
         .daccess_rvalid (dc2cpu_valid),
         .daccess_rdata  (dc2cpu_rdata),
+        .daccess_stall  (dc2cpu_stall),
         .daccess_wen    (cpu2dc_wen),
-        .daccess_wdata  (dc2cpu_wdata),
+        .daccess_wdata  (cpu2dc_wdata),
         .daccess_wresp  (dc2cpu_wresp)
     );
 
@@ -126,8 +128,9 @@ module cpu_top_axi(
         .data_addr      (cpu2dc_addr),
         .data_valid     (dc2cpu_valid),
         .data_rdata     (dc2cpu_rdata),
+        .data_stall     (dc2cpu_stall),
         .data_wen       (cpu2dc_wen),
-        .data_wdata     (dc2cpu_wdata),
+        .data_wdata     (cpu2dc_wdata),
         .data_wresp     (dc2cpu_wresp),
         // Interface to Bus
         .dev_wrdy       (dev2dc_wrdy),

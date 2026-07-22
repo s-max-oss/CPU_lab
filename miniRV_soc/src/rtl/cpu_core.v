@@ -39,6 +39,7 @@ module cpu_core(
     output reg  [ 3:0]  daccess_ren,
     output reg  [31:0]  daccess_addr,
     input  wire         daccess_rvalid,
+    input  wire         daccess_stall,  // DCache 直通模式读等待指示
     input  wire [31:0]  daccess_rdata,
     output reg  [ 3:0]  daccess_wen,
     output reg  [31:0]  daccess_wdata,
@@ -65,9 +66,37 @@ module cpu_core(
 
     // 综合阻塞: load-use + AXI 取指未就绪
 `ifdef USE_AXI
-    assign stall = stall_load || !ifetch_valid;
-    // ifetch_valid=1 时请求 npc(下一条指令), 避免 ICache 重复捕获旧 PC
-    assign ifetch_addr = stall_load ? (pc - 32'd4) : (ifetch_valid ? npc : pc);
+    // flush_axi: 分支跳转后保持清除 IF_ID，直到跳转目标指令到达
+    // 防止 ICache 在跳转前已发起的旧请求数据污染流水线
+    reg flush_axi;
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if (cpu_rst)
+            flush_axi <= 1'b0;
+        else if (flush)
+            flush_axi <= 1'b1;
+        else if (ifetch_valid)
+            flush_axi <= 1'b0;
+    end
+
+    // ifetch_ready: 指令有效且未在 flush-until-valid 等待中
+    wire ifetch_ready = ifetch_valid && !flush_axi;
+
+    // load_wait: DCache 直通模式下, AXI 读等待期间阻塞流水线
+    // data_stall 由 DCache 在发起读时置 1, 数据返回时清 0
+    // 但 data_stall 有 1 拍 NBA 延迟: daccess_ren 在 T 拍可见, data_stall 在 T+1 拍才置 1
+    // ex_was_load 预判: EX 阶段有 load 时提前拉高, 堵住 MEM→WB, 等 data_stall 接管
+    reg ex_was_load;
+    always @(posedge cpu_clk or posedge cpu_rst) begin
+        if (cpu_rst)
+            ex_was_load <= 1'b0;
+        else if (!load_wait)
+            ex_was_load <= |ex_da_ren;
+        else if (daccess_stall)
+            ex_was_load <= 1'b0;
+    end
+    wire load_wait = daccess_stall || ex_was_load;
+    assign stall = (stall_load || !ifetch_ready || load_wait) && !flush;
+    assign ifetch_addr = flush ? npc : (stall_load ? (pc - 32'd4) : (ifetch_ready ? npc : pc));
 `else
     assign stall = stall_load;
     assign ifetch_addr = stall ? (pc - 32'd4) : pc;
@@ -95,7 +124,8 @@ module cpu_core(
     //     正确跟踪（ID 阶段的 pc+4 计算: ex_pc4 = ex_pc + 4 恰好正确）
     //   - 硬件综合后 BRAM clk-to-q 延迟确保时序收敛
 
-    assign ifetch_req  = !cpu_rst;
+    // 流水线阻塞期间不发起新取指，避免 ICache 数据在 IF_ID 无法捕获时丢失
+    assign ifetch_req  = !cpu_rst && !load_wait && !stall_load;
 
     // stall=1 时 IROM 地址回退 4 字节，重新取指被 IF/ID 丢弃的那条指令
     // 原因：同步 BRAM 有 1 周期读延迟，stall 阻止 IF/ID 捕获时 IROM 已
@@ -123,11 +153,15 @@ module cpu_core(
     // BRAM 为同步读（1 周期延迟），复位期间读出的 mem[0] 已就绪
     // ifetch_valid 在复位后第 1 拍为 0（NBA 滞后）→ 第 1 拍取 NOP
     // 这个 NOP 气泡恰好吸收 BRAM 冗余读出，避免指令重复捕获
+`ifdef USE_AXI
+    wire [31:0] if_inst = ifetch_ready ? ifetch_inst : 32'h00000013;
+`else
     wire [31:0] if_inst = ifetch_valid ? ifetch_inst : 32'h00000013;
+`endif
 
     // AXI 模式: ID 消费 IF_ID 数据后清除，防止重复执行
 `ifdef USE_AXI
-    wire if_clear = !stall_load && !ifetch_valid;
+    wire if_clear = !stall_load && !ifetch_ready && !load_wait;
 `else
     wire if_clear = 1'b0;
 `endif
@@ -228,7 +262,7 @@ module cpu_core(
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (id_ex_flush),
-        .stall          (1'b0),
+        .stall          (stall_load || load_wait),
         .pc_in          (id_pc),
         .rD1_in         (id_rD1_fwd),
         .rD2_in         (id_rD2_fwd),
@@ -372,6 +406,7 @@ module cpu_core(
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (1'b0),
+        .stall          (load_wait),
         .alu_c_in       (ex_alu_c),
         .rD2_in         (ex_rD2),
         .pc4_in         (ex_pc4),
@@ -403,7 +438,7 @@ module cpu_core(
         if (cpu_rst) begin
             daccess_ren   <= 4'h0;
             daccess_wen   <= 4'h0;
-        end else begin
+        end else if (!load_wait) begin
             daccess_ren   <= ex_da_ren;
             daccess_addr  <= ex_alu_c;
             daccess_wen   <= ex_da_wen;
@@ -422,6 +457,7 @@ module cpu_core(
         .clk            (cpu_clk),
         .rst            (cpu_rst),
         .flush          (1'b0),
+        .stall          (load_wait),
         .alu_c_in       (mem_alu_c),
         .ram_ext_in     (32'h0),                 // 未使用（MEXT 在 WB）
         .pc4_in         (mem_pc4),
@@ -473,11 +509,7 @@ module cpu_core(
     wire [ 4:0] debug_wb_rf_wR /* verilator public */ ;
     wire [31:0] debug_wb_rf_wD /* verilator public */ ;
 
-`ifdef USE_AXI
-    assign debug_wb_pc    = wb_pc4;
-`else
     assign debug_wb_pc    = wb_pc4 - 32'd4;
-`endif
     assign debug_wb_rf_we = wb_rf_we;
     assign debug_wb_rf_wR = wb_rd_addr;
     assign debug_wb_rf_wD = wb_wD;

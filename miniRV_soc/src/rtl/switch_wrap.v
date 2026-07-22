@@ -2,7 +2,13 @@
 // switch_wrap.v — 拨码开关外设 (AXI4-Lite Slave)
 // ============================================================================
 // 地址: 0xFFFF_0000, 只读 16-bit
-// 读取返回 {16'h0, sw[15:0]}, 写操作被忽略
+//   读取返回 {16'h0, sw[15:0]}, 写操作被忽略 (但仍需正确完成 B 通道握手)
+//
+// AXI4-Lite 写协议 — 关键修复:
+//   虽然是只读设备, 但 AXI 写事务仍必须正确完成 B 通道握手,
+//   否则 axi_master 会在 DC_WR_B 状态永久等待 bvalid.
+//   修复: aw_hs/w_hs 独立跟踪 AW/W 握手, bvalid = aw_hs && w_hs
+//   (详见 digled_wrap.v 中的完整注释)
 
 `timescale 1ns / 1ps
 
@@ -35,12 +41,31 @@ module switch_wrap (
     assign wready  = 1'b1;
     assign arready = 1'b1;
 
-    // Write response (write data ignored)
+    // ========================================================================
+    // AXI4-Lite 写通道握手跟踪
+    // ========================================================================
+    // 虽然是只读外设 (写数据被丢弃), 但仍需正确完成 B 通道握手,
+    // 否则 axi_master 在 DC_WR_B 状态永久等待 bvalid → CPU 卡死.
+    // aw_hs/w_hs 分别记录 AW/W 通道握手, 两者都完成后拉高 bvalid.
+    reg aw_hs, w_hs;
+    always @(posedge aclk or posedge areset) begin
+        if (areset) begin
+            aw_hs <= 1'b0;
+            w_hs  <= 1'b0;
+        end else begin
+            if (awvalid && awready) aw_hs <= 1'b1;
+            else if (bvalid && bready) aw_hs <= 1'b0;
+            if (wvalid && wready) w_hs <= 1'b1;
+            else if (bvalid && bready) w_hs <= 1'b0;
+        end
+    end
+
+    // Write response (assert after BOTH AW and W handshakes complete)
     reg bvalid_reg;
     always @(posedge aclk or posedge areset)
         if (areset) bvalid_reg <= 1'b0;
-        else if (awvalid && wvalid) bvalid_reg <= 1'b1;
-        else if (bready) bvalid_reg <= 1'b0;
+        else if (bvalid && bready) bvalid_reg <= 1'b0;
+        else if (aw_hs && w_hs) bvalid_reg <= 1'b1;
     assign bvalid = bvalid_reg;
 
     // Read response

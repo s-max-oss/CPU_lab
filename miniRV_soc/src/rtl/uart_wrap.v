@@ -3,10 +3,17 @@
 // ============================================================================
 // 地址: 0xFFFF_3000
 //   偏移 0x0: STAT (只读)  — [0] rx_valid, [1] tx_ready
-//   偏移 0x4: DATA (读=RX, 写=TX)
+//   偏移 0x4: DATA (读=RX FIFO, 写=TX FIFO)
 //
 // 波特率: 115200 @ 50MHz, 位周期 = 434 clk
 // 帧格式: 1 start + 8 data (LSB first) + 1 stop
+//
+// AXI4-Lite 写协议 — 关键修复:
+//   AXI4-Lite 规范中 AW 通道和 W 通道是独立的。原始实现用 `awvalid && wvalid`
+//   检测写事务, 但 axi_master 先完成 AW 握手再发 W, 两信号不同时为高,
+//   导致 TX 永远不触发且 bvalid 永远不拉高。修复: aw_hs/w_hs 独立跟踪握手,
+//   在两者都完成后才触发 TX 并拉高 bvalid。
+//   bvalid 清除必须用 `bvalid && bready` 而非单独 `bready`.
 
 `timescale 1ns / 1ps
 
@@ -46,14 +53,30 @@ module uart_wrap #(
     assign arready = 1'b1;
 
     // ========================================================================
-    // Write response
+    // Write response — AXI4-Lite 写通道握手跟踪
     // ========================================================================
+    // AW (地址写) 和 W (数据写) 是两个独立通道. aw_hs/w_hs 分别记录各自
+    // 通道的握手完成, B 通道响应在两个都完成后发送.
+    // 修复前: bvalid 条件为 awvalid && wvalid (要求同周期有效) → 永久阻塞
+    // 修复后: bvalid = aw_hs && w_hs (两个握手都完成即可)
+    reg aw_hs, w_hs;
+    always @(posedge aclk or posedge areset) begin
+        if (areset) begin
+            aw_hs <= 1'b0;
+            w_hs  <= 1'b0;
+        end else begin
+            if (awvalid && awready) aw_hs <= 1'b1;
+            else if (bvalid && bready) aw_hs <= 1'b0;
+            if (wvalid && wready) w_hs <= 1'b1;
+            else if (bvalid && bready) w_hs <= 1'b0;
+        end
+    end
+
     reg bvalid_reg;
-    wire wr_active = awvalid && wvalid;
     always @(posedge aclk or posedge areset)
         if (areset) bvalid_reg <= 1'b0;
-        else if (wr_active) bvalid_reg <= 1'b1;
-        else if (bready) bvalid_reg <= 1'b0;
+        else if (bvalid && bready) bvalid_reg <= 1'b0;
+        else if (aw_hs && w_hs) bvalid_reg <= 1'b1;
     assign bvalid = bvalid_reg;
 
     // ========================================================================
@@ -71,7 +94,8 @@ module uart_wrap #(
             tx_bitcnt <= 4'd0;
             tx_timer  <= 16'd0;
         end else begin
-            if (wr_active && !tx_busy) begin
+            // TX 触发: AW+W 同周期有效 或 两个握手都已分别完成
+            if ((awvalid && wvalid || (aw_hs && w_hs)) && !tx_busy) begin
                 tx_busy   <= 1'b1;
                 tx_shift  <= wdata[7:0];
                 tx_bitcnt <= 4'd0;
