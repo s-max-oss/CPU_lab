@@ -1,13 +1,13 @@
-// ============================================================================
-// soc_simple_tb.v — miniRV_SoC RUN_TRACE 模式简单集成测试
-// ============================================================================
-// 测试 RUN_TRACE 模式下 SoC 的基本功能:
-//   - CPU 取指→译码→执行→访存→写回 完整路径
-//   - LUI, ADDI, SW, LW 指令序列
-//   - 通过 RUN_TRACE 宏定义绕过 PLL/Crossbar, 直接连接 BRAM
-//
-// 用法 (xsim):
-//   xvlog --define RUN_TRACE -i ../rtl ../rtl/*.v ../sim/soc_simple_tb.v
+
+
+
+
+
+
+
+
+
+/*.v ../sim/soc_simple_tb.v
 //   xelab -L xil_defaultlib soc_simple_tb -s sim_soc
 //   xsim sim_soc --runall
 // ============================================================================
@@ -29,7 +29,7 @@ module soc_simple_tb;
     wire [ 7:0] dig_seg1;
     wire        tx;
 
-    // AXI 外部存储器接口（RUN_TRACE模式下由内部BRAM接管，此处悬空即可）
+    // AXI RUN_TRACEBRAM
     wire [31:0] mem_awaddr;
     wire [ 7:0] mem_awlen;
     wire [ 2:0] mem_awsize;
@@ -60,7 +60,7 @@ module soc_simple_tb;
 
     always #5 clk = ~clk;
 
-    // 顶层: miniRV_SoC（需要定义 RUN_TRACE 编译宏）
+    // : miniRV_SoC RUN_TRACE 
     miniRV_SoC DUT (
         .fpga_clk        (clk),
         .fpga_rst        (rstn),
@@ -103,7 +103,7 @@ module soc_simple_tb;
 
         for (cycle = 0; cycle < 50000; cycle = cycle + 1) begin
             @(posedge clk);
-            // 检测 ecall (inst=0x73) 作为程序结束标志
+            //  ecall (inst=0x73) 
             if (DUT.U_cpu_axi.U_core.ifetch_valid &&
                 DUT.U_cpu_axi.U_core.ifetch_inst == 32'h0000_0073) begin
                 #100;

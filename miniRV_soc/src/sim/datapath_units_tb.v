@@ -1,9 +1,9 @@
-// ============================================================================
-// datapath_units_tb.v — 数据通路单元综合测试
-// ============================================================================
-// 直接测试所有数据通路子模块: SEXT, NPC, ALU, MREQ, MEXT
-// 注意: ALU 为组合逻辑版本（无 clk/rst/busy）
-// ============================================================================
+
+
+
+
+
+
 
 `timescale 1ns / 1ps
 
@@ -65,7 +65,7 @@ module datapath_units_tb;
         .pc4        (pc4)
     );
 
-    // 多周期 ALU（含 clk/rst/busy 端口）
+
     wire alu_busy;
     wire alu_done;
     ALU U_alu (
@@ -105,12 +105,12 @@ module datapath_units_tb;
         input [31:0] b;
         input [31:0] expected;
         begin
-            // 先恢复到 ALU_ADD，等一个时钟沿让 op_r 更新，避免 op_r 锁存非零值
+
             alu_op = `ALU_ADD;
             alu_a = a;
             alu_b = b;
             @(posedge clk);
-            // 再设置目标操作，结果在组合逻辑上立即可见
+
             alu_op = operation;
             #1;
             if (alu_c !== expected) begin
@@ -178,7 +178,7 @@ module datapath_units_tb;
         #12;
         rst = 1'b0;
 
-        // ---- SEXT: 立即数符号扩展 ----
+
         sext_op = `EXT_I;
         sext_inst = 32'hf800_0013;
         #1;
@@ -204,7 +204,7 @@ module datapath_units_tb;
         #1;
         if (ext !== 32'h0000_0008) begin $display("SEXT_FAIL J"); errors = errors + 1; end
 
-        // ---- NPC: 下一条指令地址 ----
+
         npc_pc = 32'h0000_1000;
         npc_offset = 32'h0000_0008;
         npc_br = 1'b0;
@@ -230,7 +230,7 @@ module datapath_units_tb;
         #1;
         if (npc !== 32'h0000_0ffc) begin $display("NPC_FAIL BR_TAKEN"); errors = errors + 1; end
 
-        // ---- ALU: 组合逻辑运算 ----
+
         check_alu("ADD",  `ALU_ADD,  32'h7fff_ffff, 32'h1, 32'h8000_0000);
         check_alu("SUB",  `ALU_SUB,  32'h3, 32'h5, 32'hffff_fffe);
         check_alu("AND",  `ALU_AND,  32'hf0f0_aa55, 32'h0ff0_0f0f, 32'h00f0_0a05);
@@ -242,7 +242,7 @@ module datapath_units_tb;
         check_alu("SLT",  `ALU_SLT,  32'hffff_ffff, 32'h1, 32'h1);
         check_alu("SLTU", `ALU_SLTU, 32'hffff_ffff, 32'h1, 32'h0);
 
-        // ALU 分支条件测试
+
         alu_a = 32'hffff_ffff;
         alu_b = 32'h0000_0001;
         alu_op = `ALU_SLT;
@@ -258,7 +258,7 @@ module datapath_units_tb;
         #1;
         if (alu_br !== 1'b1) begin $display("BR_FAIL BGEU"); errors = errors + 1; end
 
-        // ---- MREQ: Store 字节使能生成和数据对齐 ----
+
         check_store("SB0", 32'h2000, `RAM_WE_B, 32'hffff_ffaa, 4'b0001, 32'h0000_00aa);
         check_store("SB1", 32'h2001, `RAM_WE_B, 32'hffff_ffaa, 4'b0010, 32'h0000_aa00);
         check_store("SB2", 32'h2002, `RAM_WE_B, 32'hffff_ffaa, 4'b0100, 32'h00aa_0000);
@@ -269,14 +269,14 @@ module datapath_units_tb;
         check_store("SW0", 32'h2000, `RAM_WE_W, 32'h1234_5678, 4'b1111, 32'h1234_5678);
         check_store("SW2_BAD", 32'h2002, `RAM_WE_W, 32'h1234_5678, 4'b0000, 32'h1234_5678);
 
-        // ---- MREQ: Load 字节使能 ----
+
         check_load_request("LB3", 32'h2003, `RAM_EXT_B, 4'hf);
         check_load_request("LHU2", 32'h2002, `RAM_EXT_HU, 4'hf);
         check_load_request("LH1_BAD", 32'h2001, `RAM_EXT_H, 4'h0);
         check_load_request("LW0", 32'h2000, `RAM_EXT_W, 4'hf);
         check_load_request("LW2_BAD", 32'h2002, `RAM_EXT_W, 4'h0);
 
-        // ---- MEXT: Load 数据提取和符号扩展 ----
+
         mext_din = 32'h80ff_7f01;
         check_mext("LB0",  `RAM_EXT_B,  2'd0, 32'h0000_0001);
         check_mext("LB2",  `RAM_EXT_B,  2'd2, 32'hffff_ffff);

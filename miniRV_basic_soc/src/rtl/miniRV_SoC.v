@@ -13,32 +13,30 @@ module miniRV_SoC(
     input  wire         rx,
     output wire         tx,
 
-    // ================= AXI4 Memory Interface (for FPGA synthesis) =================
-    // Write address
     output wire [31:0]  mem_axi_awaddr,
     output wire [ 7:0]  mem_axi_awlen,
     output wire [ 2:0]  mem_axi_awsize,
     output wire [ 1:0]  mem_axi_awburst,
     input  wire         mem_axi_awready,
     output wire         mem_axi_awvalid,
-    // Write data
+
     output wire [31:0]  mem_axi_wdata,
     input  wire         mem_axi_wready,
     output wire [ 3:0]  mem_axi_wstrb,
     output wire         mem_axi_wlast,
     output wire         mem_axi_wvalid,
-    // Write response
+
     output wire         mem_axi_bready,
     input  wire [ 1:0]  mem_axi_bresp,
     input  wire         mem_axi_bvalid,
-    // Read address
+
     output wire [31:0]  mem_axi_araddr,
     output wire [ 7:0]  mem_axi_arlen,
     output wire [ 2:0]  mem_axi_arsize,
     output wire [ 1:0]  mem_axi_arburst,
     input  wire         mem_axi_arready,
     output wire         mem_axi_arvalid,
-    // Read data
+
     input  wire [31:0]  mem_axi_rdata,
     output wire         mem_axi_rready,
     input  wire [ 1:0]  mem_axi_rresp,
@@ -47,14 +45,10 @@ module miniRV_SoC(
 );
 
 `ifdef RUN_TRACE
-    // ========================================================================
-    // RUN_TRACE 模式: 绕过 PLL，内部实例化 bram_axi 作为 AXI 存储器
-    // 用于 Verilator trace 测试 和 Vivado xsim 快速仿真
-    // ========================================================================
+
     wire sys_clk = fpga_clk;
     wire sys_rst = fpga_rst;    // Trace test: fpga_rst is HIGH active
 
-    // ------ cpu_top AXI ↔ bram_axi 信号 ------
     wire [31:0]  cpu_awaddr;
     wire [ 7:0]  cpu_awlen;
     wire [ 2:0]  cpu_awsize;
@@ -81,7 +75,6 @@ module miniRV_SoC(
     wire         cpu_rlast;
     wire         cpu_rvalid;
 
-    // ------ CPU + Cache + AXI Master ------
     cpu_top U_cpu (
         .cpu_clk        (sys_clk),
         .cpu_rst        (sys_rst),
@@ -112,11 +105,9 @@ module miniRV_SoC(
         .m_axi_rvalid   (cpu_rvalid)
     );
 
-    // ------ AXI BRAM 存储器 ------
-    // 模块名 bram_axi / 实例名 U_bram 是 trace 测试框架的硬性要求
     bram_axi U_bram (
         .s_aclk         (sys_clk),
-        .s_aresetn      (~sys_rst),        // bram_axi 使用低复位
+        .s_aresetn      (~sys_rst),
         .s_axi_awaddr   (cpu_awaddr),
         .s_axi_awlen    (cpu_awlen),
         .s_axi_awsize   (cpu_awsize),
@@ -144,14 +135,12 @@ module miniRV_SoC(
         .s_axi_rready   (cpu_rready)
     );
 
-    // 外设和外部 AXI 接口悬空
     assign led     = 16'h0;
     assign dig_en  = 8'h0;
     assign dig_seg = 8'h0;
     assign dig_seg1 = 8'h0;
     assign tx      = 1'b1;
 
-    // 外部 AXI 接口悬空（RUN_TRACE 时不接外部 DDR）
     assign mem_axi_awaddr  = 32'h0;
     assign mem_axi_awlen   = 8'h0;
     assign mem_axi_awsize  = 3'h0;
@@ -170,9 +159,7 @@ module miniRV_SoC(
     assign mem_axi_rready  = 1'b0;
 
 `else
-    // ========================================================================
-    // FPGA 模式: PLL + 外部 AXI 存储器接口
-    // ========================================================================
+
     wire pll_clk1;
     wire pll_lock;
     wire sys_clk = pll_lock & pll_clk1;
@@ -185,7 +172,6 @@ module miniRV_SoC(
         .clk_out1   (pll_clk1)
     );
 
-    // ------ CPU + Cache + AXI Master → 外部 AXI 接口 ------
     cpu_top U_cpu (
         .cpu_clk        (sys_clk),
         .cpu_rst        (sys_rst),
@@ -216,7 +202,6 @@ module miniRV_SoC(
         .m_axi_rvalid   (mem_axi_rvalid)
     );
 
-    // 外设悬空
     assign led     = 16'h0;
     assign dig_en  = 8'h0;
     assign dig_seg = 8'h0;

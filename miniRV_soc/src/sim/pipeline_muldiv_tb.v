@@ -1,9 +1,9 @@
-// ============================================================================
-// pipeline_muldiv_tb.v — M-extension 流水线测试
-// ============================================================================
-// 测试 MUL, MULH, MULHU, DIV, DIVU, REM, REMU 指令在流水线中的执行
-// 注意: 本设计使用多周期乘除法器，需要充足等待时间让结果写回
-// ============================================================================
+
+
+
+
+
+
 
 `timescale 1ns / 1ps
 
@@ -69,7 +69,7 @@ module pipeline_muldiv_tb;
             dmem[i] = 32'h0;
         end
 
-        // 乘除法测试序列（多周期 M-extension）
+
         imem[ 0] = enc_i(-26, 0, 1);                      // x1 = -26 (0xffffffe6)
         imem[ 1] = enc_i(5,    0, 2);                     // x2 = 5
         imem[ 2] = enc_r(7'b0000001, 3'b000, 2, 1, 3);   // mul  x3,x1,x2  = -130
@@ -80,13 +80,13 @@ module pipeline_muldiv_tb;
         imem[ 7] = enc_r(7'b0000001, 3'b101, 2, 1, 8);   // divu x8,x1,x2  = 0x3333332e
         imem[ 8] = enc_r(7'b0000001, 3'b111, 2, 1, 9);   // remu x9,x1,x2  = 0
         imem[ 9] = enc_i(1, 3, 10);                      // addi x10,x3,1 = -129
-        imem[10] = 32'h0000_0073;                        // ecall 标记
+        imem[10] = 32'h0000_0073;
 
         #12 rst = 1'b0;
         for (i = 0; i < 1000; i = i + 1) begin
             @(posedge clk);
             if (if_valid && if_inst == 32'h0000_0073) begin
-                // 等待多周期乘除法全部完成（REMU 最慢 ~35 周期）
+
                 repeat (500) @(posedge clk);
                 if (DUT.U_RF.regs[1] !== 32'hffff_ffe6 ||
                     DUT.U_RF.regs[2] !== 32'd5 ||

@@ -1,9 +1,3 @@
-// ============================================================================
-// uart_wrap_ip.v -- UART peripheral (AXI4 -> AXI4-Lite + AXI Uartlite)
-// ============================================================================
-// Address: 0xFFFF_3000
-// Baud rate: 115200 @ 50MHz
-
 `timescale 1ns / 1ps
 
 module uart_wrap_ip (

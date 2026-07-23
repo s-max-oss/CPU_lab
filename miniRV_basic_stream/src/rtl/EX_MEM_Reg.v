@@ -1,10 +1,3 @@
-// ============================================================================
-// EX_MEM_Reg.v — EX/MEM 流水线寄存器
-// ============================================================================
-// 连接 EX（执行）和 MEM（访存）阶段。
-// 锁存 ALU 结果、写数据、分支条件、目标寄存器号及 MEM/WB 阶段需要的控制信号。
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 module EX_MEM_Reg (
@@ -12,21 +5,18 @@ module EX_MEM_Reg (
     input  wire         rst,
     input  wire         flush,
 
-    // 数据通路
     input  wire [31:0]  alu_c_in,
-    input  wire [31:0]  rD2_in,        // 存数指令的数据（rs2 原值）
+    input  wire [31:0]  rD2_in,
     input  wire [31:0]  pc4_in,
-    input  wire         br_in,         // 分支条件
+    input  wire         br_in,
     input  wire [ 4:0]  rd_addr_in,
 
-    // 控制信号 — MEM/WB 阶段使用
-    input  wire [ 1:0]  npc_op_in,     // 分支判断
+    input  wire [ 1:0]  npc_op_in,
     input  wire [ 2:0]  ram_rop_in,
     input  wire [ 3:0]  ram_wop_in,
     input  wire         rf_we_in,
     input  wire [ 1:0]  rf_wsel_in,
 
-    // 输出
     output reg  [31:0]  alu_c_out,
     output reg  [31:0]  rD2_out,
     output reg  [31:0]  pc4_out,

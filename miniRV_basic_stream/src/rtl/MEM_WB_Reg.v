@@ -1,10 +1,3 @@
-// ============================================================================
-// MEM_WB_Reg.v — MEM/WB 流水线寄存器
-// ============================================================================
-// 连接 MEM（访存）和 WB（写回）阶段。
-// 锁存 ALU 结果、内存读数据、PC+4、目标寄存器号及写回控制信号。
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 module MEM_WB_Reg (
@@ -12,19 +5,16 @@ module MEM_WB_Reg (
     input  wire         rst,
     input  wire         flush,
 
-    // 数据通路
     input  wire [31:0]  alu_c_in,
     input  wire [31:0]  ram_ext_in,
     input  wire [31:0]  pc4_in,
     input  wire [ 4:0]  rd_addr_in,
 
-    // 控制信号
     input  wire         rf_we_in,
     input  wire [ 1:0]  rf_wsel_in,
-    input  wire [ 2:0]  ram_rop_in,     // MEXT 读类型（延迟到 WB 使用）
-    input  wire [ 1:0]  byte_offs_in,   // 地址低 2 位字节偏移
+    input  wire [ 2:0]  ram_rop_in,
+    input  wire [ 1:0]  byte_offs_in,
 
-    // 输出
     output reg  [31:0]  alu_c_out,
     output reg  [31:0]  ram_ext_out,
     output reg  [31:0]  pc4_out,

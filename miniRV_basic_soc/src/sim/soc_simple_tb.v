@@ -1,10 +1,10 @@
-// ============================================================================
-// soc_simple_tb.v — miniRV_SoC AXI Cache 仿真测试
-// ============================================================================
-// 测试 CPU + ICache + DCache + axi_master + bram_axi 完整通路
-//
-// 用法 (Vivado xsim):
-//   xvlog --define RUN_TRACE -i ../rtl ../rtl/*.v ../sim/soc_simple_tb.v
+
+
+
+
+
+
+/*.v ../sim/soc_simple_tb.v
 //   xelab -L xil_defaultlib soc_simple_tb -s sim_soc
 //   xsim sim_soc --runall
 // ============================================================================
@@ -16,7 +16,7 @@
 module soc_simple_tb;
 
     reg         clk  = 1;
-    reg         rst  = 1;     // HIGH active (trace test 要求)
+    reg         rst  = 1;     // HIGH active (trace test )
     reg  [15:0] sw   = 16'h0;
     reg         rx   = 1'b1;
 
@@ -26,7 +26,7 @@ module soc_simple_tb;
     wire [ 7:0] dig_seg1;
     wire        tx;
 
-    // AXI 外部存储器接口（RUN_TRACE 模式下内部 bram_axi 接管，此处悬空）
+    // AXI RUN_TRACE  bram_axi 
     wire [31:0] mem_awaddr;
     wire [ 7:0] mem_awlen;
     wire [ 2:0] mem_awsize;
@@ -58,7 +58,7 @@ module soc_simple_tb;
     always #5 clk = ~clk;
 
     // ================================================================
-    // miniRV_SoC 实例（需定义 RUN_TRACE 编译宏）
+    // miniRV_SoC  RUN_TRACE 
     // ================================================================
     miniRV_SoC DUT (
         .fpga_clk        (clk),
@@ -98,13 +98,13 @@ module soc_simple_tb;
     );
 
     initial begin
-        // 复位序列: fpga_rst 高电平有效
-        // 注意: 避免与 clk posedge 对齐, 防止时序竞争
+        // : fpga_rst 
+        // :  clk posedge , 
         rst = 1'b1;
         #203;
-        rst = 1'b0;  // 释放复位
+        rst = 1'b0;  // 
 
-        // 等待执行完成（检测 ecall = 0x73）
+        //  ecall = 0x73
         for (cycle = 0; cycle < 50000; cycle = cycle + 1) begin
             @(posedge clk);
             if (DUT.U_cpu.U_core.ifetch_valid &&

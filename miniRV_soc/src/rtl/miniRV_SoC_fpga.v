@@ -1,23 +1,3 @@
-// ============================================================================
-// miniRV_SoC_fpga.v — FPGA 综合顶层
-// ============================================================================
-// 架构: miniRV_SoC (AXI 模式) + bram_axi_synth (AXI BRAM 存储器)
-//
-// miniRV_SoC 内部: cpu_top_axi → axi_crossbar → 5 外设 + mem_axi 端口
-// 本模块将 mem_axi 端口连接到 bram_axi_synth, 提供片上 BRAM 程序存储器.
-//
-// I/O:
-//   fpga_clk  — 100MHz 系统时钟 (经 PLL 输出)
-//   fpga_rst  — 低有效复位
-//   sw[15:0]  — 拨码开关输入
-//   led[15:0] — LED 输出
-//   dig_en[7:0], dig_seg[7:0] — 数码管
-//   rx, tx    — UART
-//
-// 综合前请确保:
-//   1. program.hex 文件已放入 Vivado 工程目录
-//   2. clk_wiz_0 IP 已配置 (或使用 RUN_TRACE 模式跳过 PLL)
-
 `timescale 1ns / 1ps
 
 `include "defines.vh"
@@ -34,8 +14,6 @@ module miniRV_SoC_fpga (
     output wire         tx
 );
 
-    // ------ 时钟与复位 ------
-    // 使用 PLL 生成稳定时钟 (也可 define RUN_TRACE 绕过 PLL 用原始时钟)
 `ifdef RUN_TRACE
     wire sys_clk = fpga_clk;
     wire sys_rst = fpga_rst;
@@ -53,7 +31,6 @@ module miniRV_SoC_fpga (
     );
 `endif
 
-    // ------ AXI Memory Bus (miniRV_SoC ↔ bram_axi_synth) ------
     wire [31:0]  mem_axi_awaddr;
     wire [ 7:0]  mem_axi_awlen;
     wire [ 2:0]  mem_axi_awsize;
@@ -80,7 +57,6 @@ module miniRV_SoC_fpga (
     wire         mem_axi_rlast;
     wire         mem_axi_rvalid;
 
-    // ------ miniRV_SoC 核心 (USE_AXI 模式) ------
     miniRV_SoC U_soc (
         .fpga_clk       (fpga_clk),
         .fpga_rst       (fpga_rst),
@@ -92,7 +68,6 @@ module miniRV_SoC_fpga (
         .rx             (rx),
         .tx             (tx),
 
-        // Memory AXI
         .mem_axi_awaddr (mem_axi_awaddr),
         .mem_axi_awlen  (mem_axi_awlen),
         .mem_axi_awsize (mem_axi_awsize),
@@ -120,7 +95,6 @@ module miniRV_SoC_fpga (
         .mem_axi_rvalid (mem_axi_rvalid)
     );
 
-    // ------ BRAM AXI 存储器 (128KB, 可综合) ------
     bram_axi_synth #(
         .DATA_WIDTH (32),
         .DATA_DEPTH (32768),

@@ -2,25 +2,24 @@
 
 `include "defines.vh"
 
-
 module DCache(
     input  wire         cpu_clk,
     input  wire         cpu_rst,        // high active
-    // Interface to CPU
+
     input  wire [ 3:0]  data_ren,
     input  wire [31:0]  data_addr,
     output reg          data_valid,
     output reg  [31:0]  data_rdata,
-    output reg          data_stall,     // 直通模式: 读等待期间拉高, 供 CPU 阻塞流水线
+    output reg          data_stall,
     input  wire [ 3:0]  data_wen,
     input  wire [31:0]  data_wdata,
     output reg          data_wresp,
-    // Interface to Write Bus
+
     input  wire         dev_wrdy,
     output reg  [ 3:0]  cpu_wen,
     output reg  [31:0]  cpu_waddr,
     output reg  [31:0]  cpu_wdata,
-    // Interface to Read Bus
+
     input  wire         dev_rrdy,
     output reg  [ 3:0]  cpu_ren,
     output reg  [31:0]  cpu_raddr,
@@ -30,7 +29,6 @@ module DCache(
 
 `ifdef ENABLE_DCACHE
 
-    // Peripherals access should be uncached.
     wire uncached = (data_addr[31:16] == 16'hFFFF) && (data_ren != 4'h0 || data_wen != 4'h0) ? 1'b1 : 1'b0;
 
     wire [1:0]  offset         = data_addr[3:2];
@@ -38,7 +36,6 @@ module DCache(
     wire        valid_bit      = cache_line_r[133];
     wire [4:0]  tag_from_cache = cache_line_r[132:128];
 
-    // Read FSM (cached path: R_IDLE -> R_TAG_CHECK -> hit?R_IDLE : R_REFILL -> R_TAG_CHECK)
     localparam R_IDLE      = 3'd0;
     localparam R_TAG_CHECK = 3'd1;
     localparam R_REFILL    = 3'd2;
@@ -46,7 +43,6 @@ module DCache(
     localparam R_BUS1      = 3'd4;
     reg [2:0] r_state, r_nstat;
 
-    // Write FSM
     localparam W_IDLE      = 3'd0;
     localparam W_TAG_CHECK = 3'd1;
     localparam W_BUS0      = 3'd2;
@@ -57,7 +53,6 @@ module DCache(
     wire hit_r = (r_state == R_TAG_CHECK) && valid_bit && (tag_from_cache == tag_from_cpu);
     wire hit_w = (w_state == W_TAG_CHECK) && valid_bit && (tag_from_cache == tag_from_cpu);
 
-    // Uncached read: registered outputs (matching passthrough timing)
     reg        uncached_valid;
     reg [31:0] uncached_rdata;
 
@@ -131,12 +126,10 @@ module DCache(
     reg        refill_req;
     reg [3:0]  ren_saved;
 
-    // Read FSM state register
     always @(posedge cpu_clk or posedge cpu_rst) begin
         r_state <= cpu_rst ? R_IDLE : r_nstat;
     end
 
-    // Read FSM next-state logic
     always @(*) begin
         case (r_state)
             R_IDLE: begin
@@ -155,7 +148,6 @@ module DCache(
         endcase
     end
 
-    // Read FSM output logic
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
             cpu_ren        <= 4'h0;
@@ -209,7 +201,6 @@ module DCache(
         end
     end
 
-    // Write FSM
     reg [3:0] wen_saved;
 
     always @(posedge cpu_clk or posedge cpu_rst) begin
@@ -284,14 +275,12 @@ module DCache(
     localparam R_STAT1 = 2'b11;
     reg [1:0] r_state, r_nstat;
     reg [3:0] ren_r;
-    reg [31:0] saved_raddr;   // 记录当前悬挂读的地址, 用于检测新请求
+    reg [31:0] saved_raddr;
 
     always @(posedge cpu_clk or posedge cpu_rst) begin
         r_state <= cpu_rst ? R_IDLE : r_nstat;
     end
 
-    // R_IDLE: 仅当无有效数据悬挂时发起新读; data_valid 保持到 CPU 消费
-    // 地址变化时作废旧数据并启动新读 (处理背靠背 load)
     always @(*) begin
         case (r_state)
             R_IDLE:  r_nstat = ((|data_ren) && (!data_valid || (data_addr != saved_raddr))) ? (dev_rrdy ? R_STAT1 : R_STAT0) : R_IDLE;
@@ -333,7 +322,7 @@ module DCache(
                     cpu_ren    <= dev_rrdy ? ren_r : 4'h0;
                 end
                 R_STAT1: begin
-                    // 保持 cpu_ren 直到 axi_master 确认 (!dev_rrdy) 或数据到达
+
                     if (dev_rvalid) begin
                         cpu_ren    <= 4'h0;
                         data_valid <= 1'b1;
@@ -397,7 +386,7 @@ module DCache(
                     cpu_wen    <= dev_wrdy ? wen_r : 4'h0;
                 end
                 W_STAT1: begin
-                    // 保持 cpu_wen 直到 axi_master 确认 (!dev_wrdy)
+
                     if (wr_resp) begin
                         cpu_wen    <= 4'h0;
                         data_wresp <= 1'b1;

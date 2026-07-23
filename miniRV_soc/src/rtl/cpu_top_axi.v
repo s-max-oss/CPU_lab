@@ -1,13 +1,3 @@
-// ============================================================================
-// cpu_top_axi.v — SoC 顶层模块 (AXI 总线版本)
-// ============================================================================
-// 【架构】
-//   cpu_core → ICache/DCache → axi_master → AXI4 总线
-//
-//   与 cpu_top.v 的区别：本模块使用 ICache/DCache + AXI 总线
-//   替代直接连接 Inst_ROM/Data_RAM，支持缓存和 AXI 外设访问。
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 `include "defines.vh"
@@ -16,32 +6,30 @@ module cpu_top_axi(
     input  wire         cpu_clk,
     input  wire         cpu_rst,        // high active
 
-    // AXI4 Master Interface
-    // write address channel
     output wire [31:0]  m_axi_awaddr,
     output wire [ 7:0]  m_axi_awlen,
     output wire [ 2:0]  m_axi_awsize,
     output wire [ 1:0]  m_axi_awburst,
     input  wire         m_axi_awready,
     output wire         m_axi_awvalid,
-    // write data channel
+
     output wire [31:0]  m_axi_wdata,
     input  wire         m_axi_wready,
     output wire [ 3:0]  m_axi_wstrb,
     output wire         m_axi_wlast,
     output wire         m_axi_wvalid,
-    // write response channel
+
     output wire         m_axi_bready,
     input  wire [ 1:0]  m_axi_bresp,
     input  wire         m_axi_bvalid,
-    // read address channel
+
     output wire [31:0]  m_axi_araddr,
     output wire [ 7:0]  m_axi_arlen,
     output wire [ 2:0]  m_axi_arsize,
     output wire [ 1:0]  m_axi_arburst,
     input  wire         m_axi_arready,
     output wire         m_axi_arvalid,
-    // read data channel
+
     input  wire [31:0]  m_axi_rdata,
     output wire         m_axi_rready,
     input  wire [ 1:0]  m_axi_rresp,
@@ -49,14 +37,12 @@ module cpu_top_axi(
     input  wire         m_axi_rvalid
 );
 
-    // ------ ICache bus-side signals ------
     wire        dev2ic_rrdy;
     wire [ 3:0] ic2dev_ren;
     wire [31:0] ic2dev_raddr;
     wire        dev2ic_rvalid;
     wire [`IC_BLK_SIZE-1:0] dev2ic_rdata;
 
-    // ------ DCache bus-side signals ------
     wire        dev2dc_wrdy;
     wire [ 3:0] dc2dev_wen;
     wire [31:0] dc2dev_waddr;
@@ -67,7 +53,6 @@ module cpu_top_axi(
     wire        dev2dc_rvalid;
     wire [`DC_BLK_SIZE-1:0] dev2dc_rdata;
 
-    // ------ CPU ↔ Cache signals ------
     wire        cpu2ic_rreq;
     wire [31:0] cpu2ic_addr;
     wire        ic2cpu_valid;
@@ -82,16 +67,15 @@ module cpu_top_axi(
     wire [31:0] cpu2dc_wdata;
     wire        dc2cpu_wresp;
 
-    // ------ CPU 核心 ------
     cpu_core U_core (
         .cpu_clk        (cpu_clk),
         .cpu_rst        (cpu_rst),
-        // 指令接口
+
         .ifetch_req     (cpu2ic_rreq),
         .ifetch_addr    (cpu2ic_addr),
         .ifetch_valid   (ic2cpu_valid),
         .ifetch_inst    (ic2cpu_inst),
-        // 数据接口
+
         .daccess_ren    (cpu2dc_ren),
         .daccess_addr   (cpu2dc_addr),
         .daccess_rvalid (dc2cpu_valid),
@@ -102,16 +86,15 @@ module cpu_top_axi(
         .daccess_wresp  (dc2cpu_wresp)
     );
 
-    // ------ ICache ------
     ICache U_icache (
         .cpu_clk        (cpu_clk),
         .cpu_rst        (cpu_rst),
-        // Interface to CPU
+
         .inst_rreq      (cpu2ic_rreq),
         .inst_addr      (cpu2ic_addr),
         .inst_valid     (ic2cpu_valid),
         .inst_out       (ic2cpu_inst),
-        // Interface to Bus
+
         .dev_rrdy       (dev2ic_rrdy),
         .cpu_ren        (ic2dev_ren),
         .cpu_raddr      (ic2dev_raddr),
@@ -119,11 +102,10 @@ module cpu_top_axi(
         .dev_rdata      (dev2ic_rdata)
     );
 
-    // ------ DCache ------
     DCache U_dcache (
         .cpu_clk        (cpu_clk),
         .cpu_rst        (cpu_rst),
-        // Interface to CPU
+
         .data_ren       (cpu2dc_ren),
         .data_addr      (cpu2dc_addr),
         .data_valid     (dc2cpu_valid),
@@ -132,7 +114,7 @@ module cpu_top_axi(
         .data_wen       (cpu2dc_wen),
         .data_wdata     (cpu2dc_wdata),
         .data_wresp     (dc2cpu_wresp),
-        // Interface to Bus
+
         .dev_wrdy       (dev2dc_wrdy),
         .cpu_wen        (dc2dev_wen),
         .cpu_waddr      (dc2dev_waddr),
@@ -144,7 +126,6 @@ module cpu_top_axi(
         .dev_rdata      (dev2dc_rdata)
     );
 
-    // ------ AXI Master ------
     axi_master #(
         .IC_BLK_LEN     (`IC_BLK_LEN),
         .DC_BLK_LEN     (`DC_BLK_LEN)
@@ -152,25 +133,23 @@ module cpu_top_axi(
         .aclk           (cpu_clk),
         .areset         (cpu_rst),
 
-        // ICache Interface
         .ic_dev_rrdy    (dev2ic_rrdy),
         .ic_cpu_ren     (|ic2dev_ren),
         .ic_cpu_raddr   (ic2dev_raddr),
         .ic_dev_rvalid  (dev2ic_rvalid),
         .ic_dev_rdata   (dev2ic_rdata),
-        // DCache Write Interface
+
         .dc_dev_wrdy    (dev2dc_wrdy),
         .dc_cpu_wen     (dc2dev_wen),
         .dc_cpu_waddr   (dc2dev_waddr),
         .dc_cpu_wdata   (dc2dev_wdata),
-        // DCache Read Interface
+
         .dc_dev_rrdy    (dev2dc_rrdy),
         .dc_cpu_ren     (|dc2dev_ren),
         .dc_cpu_raddr   (dc2dev_raddr),
         .dc_dev_rvalid  (dev2dc_rvalid),
         .dc_dev_rdata   (dev2dc_rdata),
 
-        // AXI4 Master Interface
         .m_axi_awaddr   (m_axi_awaddr),
         .m_axi_awlen    (m_axi_awlen),
         .m_axi_awsize   (m_axi_awsize),

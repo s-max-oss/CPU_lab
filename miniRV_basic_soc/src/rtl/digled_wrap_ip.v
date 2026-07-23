@@ -1,10 +1,3 @@
-// ============================================================================
-// digled_wrap_ip.v -- DigLED peripheral (AXI4 -> AXI4-Lite + AXI GPIO)
-// ============================================================================
-// Address: 0xFFFF_2000, write 8+8 bits
-//   channel 1 = dig_en  (bit select)
-//   channel 2 = dig_seg (segment select)
-
 `timescale 1ns / 1ps
 
 module digled_wrap_ip (

@@ -1,17 +1,7 @@
-// ============================================================================
-// timer_wrap_ip.v -- Timer peripheral (AXI4 -> AXI4-Lite + AXI GPIO)
-// ============================================================================
-// Address: 0xFFFF_4000, read-only 64-bit free-running counter
-//   offset 0x0: counter[31:0]  low 32 bits  (GPIO channel 1)
-//   offset 0x4: counter[63:32] high 32 bits (GPIO channel 2)
-//
-// Architecture (per Lab 2 B-6 spec):
-//   AXI4 Slave (from crossbar) -> axi_protocol_converter_0 -> axi_gpio_0
-
 `timescale 1ns / 1ps
 
 module timer_wrap_ip (
-    // AXI4 Slave (from AXI Crossbar)
+
     input  wire         aclk,
     input  wire         aresetn,         // Low Active
 
@@ -42,18 +32,12 @@ module timer_wrap_ip (
     input  wire         s_axi_rready
 );
 
-    // ------------------------------------------------------------------
-    // 64-bit free-running counter
-    // ------------------------------------------------------------------
     reg [63:0] timer;
     always @(posedge aclk or negedge aresetn) begin
         if (!aresetn) timer <= 64'h0;
         else          timer <= timer + 64'h1;
     end
 
-    // ------------------------------------------------------------------
-    // AXI Protocol Converter (AXI4 -> AXI4-Lite)
-    // ------------------------------------------------------------------
     wire [31:0] tim_awaddr;
     wire        tim_awvalid, tim_awready;
     wire [31:0] tim_wdata;
@@ -71,7 +55,6 @@ module timer_wrap_ip (
         .aclk          (aclk),
         .aresetn       (aresetn),
 
-        // S_AXI: full AXI4 from crossbar
         .s_axi_awaddr  (s_axi_awaddr),
         .s_axi_awlen   (s_axi_awlen),
         .s_axi_awsize  (s_axi_awsize),
@@ -108,7 +91,6 @@ module timer_wrap_ip (
         .s_axi_rvalid  (s_axi_rvalid),
         .s_axi_rready  (s_axi_rready),
 
-        // M_AXI: AXI4-Lite to GPIO IP
         .m_axi_awaddr  (tim_awaddr),
         .m_axi_awprot  (),
         .m_axi_awvalid (tim_awvalid),
@@ -130,9 +112,6 @@ module timer_wrap_ip (
         .m_axi_rready  (tim_rready)
     );
 
-    // ------------------------------------------------------------------
-    // AXI GPIO IP -- Timer (2-channel, all inputs)
-    // ------------------------------------------------------------------
     axi_gpio_0 U_timer (
         .s_axi_aclk    (aclk),
         .s_axi_aresetn (aresetn),

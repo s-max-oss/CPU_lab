@@ -1,10 +1,10 @@
-// ============================================================================
-// full_decode_tb.v — 全指令解码测试（44条指令全覆盖）
-// ============================================================================
-// 直接测试 Controller 模块：输入 32 位指令机器码，检查所有控制信号输出
-// 覆盖: R-type(10) + M-type(7) + I-type(9) + Load(5) + Store(3)
-//       + Branch(6) + LUI + AUIPC + JAL + JALR = 44 条
-// ============================================================================
+
+
+
+
+
+
+
 
 `timescale 1ns / 1ps
 
@@ -100,7 +100,7 @@ module full_decode_tb;
     endtask
 
     initial begin
-        // R-type integer instructions
+
         check_decode("ADD",   enc_r(7'h00, 3'h0), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_ADD,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("SUB",   enc_r(7'h20, 3'h0), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_SUB,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("SLL",   enc_r(7'h00, 3'h1), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_SLL,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
@@ -112,7 +112,7 @@ module full_decode_tb;
         check_decode("OR",    enc_r(7'h00, 3'h6), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_OR,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("AND",   enc_r(7'h00, 3'h7), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_AND,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
 
-        // M-extension instructions (hand-calculated combinational ALU)
+
         check_decode("MUL",   enc_r(7'h01, 3'h0), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_MUL,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("MULH",  enc_r(7'h01, 3'h1), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_MULH,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("MULHU", enc_r(7'h01, 3'h3), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_MULHU, `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
@@ -121,7 +121,7 @@ module full_decode_tb;
         check_decode("REM",   enc_r(7'h01, 3'h6), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_REM,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("REMU",  enc_r(7'h01, 3'h7), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_REMU,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
 
-        // I-type ALU instructions
+
         check_decode("ADDI",  enc_i(7'h13, 3'h0, 12'h123), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_ADD,  `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
         check_decode("SLLI",  enc_i(7'h13, 3'h1, 12'h003), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_SLL,  `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
         check_decode("SLTI",  enc_i(7'h13, 3'h2, 12'hfff), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_SLT,  `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
@@ -132,19 +132,19 @@ module full_decode_tb;
         check_decode("ORI",   enc_i(7'h13, 3'h6, 12'h123), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_OR,   `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
         check_decode("ANDI",  enc_i(7'h13, 3'h7, 12'h123), `NPC_PC4, 1, `WB_ALU, `EXT_I, `ALU_AND,  `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
 
-        // Load instructions
+
         check_decode("LB",  enc_i(7'h03, 3'h0, 12'h004), `NPC_PC4, 1, `WB_RAM, `EXT_I, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_B,  `RAM_WE_N);
         check_decode("LH",  enc_i(7'h03, 3'h1, 12'h004), `NPC_PC4, 1, `WB_RAM, `EXT_I, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_H,  `RAM_WE_N);
         check_decode("LW",  enc_i(7'h03, 3'h2, 12'h004), `NPC_PC4, 1, `WB_RAM, `EXT_I, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_W,  `RAM_WE_N);
         check_decode("LBU", enc_i(7'h03, 3'h4, 12'h004), `NPC_PC4, 1, `WB_RAM, `EXT_I, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_BU, `RAM_WE_N);
         check_decode("LHU", enc_i(7'h03, 3'h5, 12'h004), `NPC_PC4, 1, `WB_RAM, `EXT_I, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_HU, `RAM_WE_N);
 
-        // Store instructions
+
         check_decode("SB", enc_s(3'h0), `NPC_PC4, 0, `WB_ALU, `EXT_S, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_B);
         check_decode("SH", enc_s(3'h1), `NPC_PC4, 0, `WB_ALU, `EXT_S, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_H);
         check_decode("SW", enc_s(3'h2), `NPC_PC4, 0, `WB_ALU, `EXT_S, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_W);
 
-        // Branch instructions
+
         check_decode("BEQ",  enc_b(3'h0), `NPC_BRA, 0, `WB_ALU, `EXT_B, `ALU_EQ,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("BNE",  enc_b(3'h1), `NPC_BRA, 0, `WB_ALU, `EXT_B, `ALU_NE,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("BLT",  enc_b(3'h4), `NPC_BRA, 0, `WB_ALU, `EXT_B, `ALU_LT,   `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
@@ -152,7 +152,7 @@ module full_decode_tb;
         check_decode("BLTU", enc_b(3'h6), `NPC_BRA, 0, `WB_ALU, `EXT_B, `ALU_LTU,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
         check_decode("BGEU", enc_b(3'h7), `NPC_BRA, 0, `WB_ALU, `EXT_B, `ALU_GEU,  `ALU_A_RS1, `ALU_B_RS2, `RAM_EXT_N, `RAM_WE_N);
 
-        // Upper-immediate and jumps
+
         check_decode("LUI",   {20'h12345, 5'd3, 7'h37}, `NPC_PC4,  1, `WB_EXT, `EXT_U, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
         check_decode("AUIPC", {20'h12345, 5'd3, 7'h17}, `NPC_PC4,  1, `WB_ALU, `EXT_U, `ALU_ADD, `ALU_A_PC,  `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);
         check_decode("JAL",   32'h0080_01ef,             `NPC_JMP,  1, `WB_PC4, `EXT_J, `ALU_ADD, `ALU_A_RS1, `ALU_B_EXT, `RAM_EXT_N, `RAM_WE_N);

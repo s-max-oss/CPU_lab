@@ -2,16 +2,15 @@
 
 `include "defines.vh"
 
-
 module ICache(
     input  wire         cpu_clk,
     input  wire         cpu_rst,        // high active
-    // Interface to CPU
+
     input  wire         inst_rreq,
     input  wire [31:0]  inst_addr,      
     output reg          inst_valid,     
     output reg  [31:0]  inst_out,       
-    // Interface to Read Bus
+
     input  wire         dev_rrdy,
     output reg  [ 3:0]  cpu_ren,        
     output reg  [31:0]  cpu_raddr,      
@@ -26,7 +25,6 @@ module ICache(
     wire        valid_bit      = cache_line_r[133];
     wire [4:0]  tag_from_cache = cache_line_r[132:128];
 
-    // ICache
     localparam IDLE      = 2'b00;
     localparam TAG_CHECK = 2'b01;
     localparam REFILL    = 2'b10;
@@ -49,7 +47,6 @@ module ICache(
     wire [133:0] cache_line_w = {1'b1, tag_from_cpu, dev_rdata};
     wire [133:0] cache_line_r;
 
-    
     blk_mem_gen_1 U_isram (
         .clka   (cpu_clk),
         .wea    (cache_we),
@@ -58,12 +55,10 @@ module ICache(
         .douta  (cache_line_r)
     );
 
-    
     always @(posedge cpu_clk or posedge cpu_rst) begin
         state <= cpu_rst ? IDLE : nstat;
     end
 
-    
     always @(*) begin
         case (state)
             IDLE:      nstat = inst_rreq ? TAG_CHECK : IDLE;
@@ -73,7 +68,6 @@ module ICache(
         endcase
     end
 
-    
     reg refill_req;
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
@@ -107,7 +101,6 @@ module ICache(
         end
     end
 
-    
 `else
 
     localparam IDLE  = 2'b00;

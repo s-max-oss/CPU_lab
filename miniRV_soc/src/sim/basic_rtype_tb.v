@@ -1,10 +1,10 @@
-// ============================================================================
-// basic_rtype_tb.v — R-type 指令功能测试（Controller + ALU 组合逻辑）
-// ============================================================================
-// 直接测试 Controller + 组合逻辑 ALU：给定指令机器码，检查 ALU 计算结果
-// 覆盖: ADD, SUB, AND (ALU 计算), Controller 控制信号
-// 注意: 本设计使用组合逻辑 ALU（无 clk/rst/busy），MUL/DIV 单周期完成
-// ============================================================================
+
+
+
+
+
+
+
 
 `timescale 1ns / 1ps
 
@@ -51,7 +51,7 @@ module basic_rtype_tb;
         .rf_wsel  (rf_wsel)
     );
 
-    // 多周期 ALU（含 clk/rst/busy 端口）
+
     wire alu_busy;
     wire alu_done;
     ALU U_alu (

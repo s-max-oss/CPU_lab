@@ -13,32 +13,30 @@ module miniRV_SoC(
     input  wire         rx,
     output wire         tx,
 
-    // AXI4 Memory Interface (to MIG / bram_axi)
-    // Write address
     output wire [31:0]  mem_axi_awaddr,
     output wire [ 7:0]  mem_axi_awlen,
     output wire [ 2:0]  mem_axi_awsize,
     output wire [ 1:0]  mem_axi_awburst,
     input  wire         mem_axi_awready,
     output wire         mem_axi_awvalid,
-    // Write data
+
     output wire [31:0]  mem_axi_wdata,
     input  wire         mem_axi_wready,
     output wire [ 3:0]  mem_axi_wstrb,
     output wire         mem_axi_wlast,
     output wire         mem_axi_wvalid,
-    // Write response
+
     output wire         mem_axi_bready,
     input  wire [ 1:0]  mem_axi_bresp,
     input  wire         mem_axi_bvalid,
-    // Read address
+
     output wire [31:0]  mem_axi_araddr,
     output wire [ 7:0]  mem_axi_arlen,
     output wire [ 2:0]  mem_axi_arsize,
     output wire [ 1:0]  mem_axi_arburst,
     input  wire         mem_axi_arready,
     output wire         mem_axi_arvalid,
-    // Read data
+
     input  wire [31:0]  mem_axi_rdata,
     output wire         mem_axi_rready,
     input  wire [ 1:0]  mem_axi_rresp,
@@ -64,11 +62,7 @@ module miniRV_SoC(
 `endif
 
 `ifdef USE_AXI
-    // ========================================================================
-    // AXI SoC 模式: cpu_top_axi → axi_crossbar → 6 slaves
-    // ========================================================================
 
-    // ------ Master AXI (cpu_top_axi → crossbar) ------
     wire [31:0]  m_axi_awaddr;
     wire [ 7:0]  m_axi_awlen;
     wire [ 2:0]  m_axi_awsize;
@@ -95,7 +89,6 @@ module miniRV_SoC(
     wire         m_axi_rlast;
     wire         m_axi_rvalid;
 
-    // ------ Slave 0: Memory (crossbar → MIG / bram_axi) ------
     wire [31:0]  s0_axi_awaddr;
     wire [ 7:0]  s0_axi_awlen;
     wire [ 2:0]  s0_axi_awsize;
@@ -122,8 +115,6 @@ module miniRV_SoC(
     wire         s0_axi_rlast;
     wire         s0_axi_rvalid;
 
-    // ------ Slaves 1-5: Peripherals ------
-    // Slave 1: Switch
     wire [31:0]  s1_axi_awaddr,  s1_axi_wdata,  s1_axi_araddr,  s1_axi_rdata;
     wire         s1_axi_awvalid, s1_axi_awready;
     wire [ 3:0]  s1_axi_wstrb;
@@ -132,7 +123,6 @@ module miniRV_SoC(
     wire         s1_axi_arvalid, s1_axi_arready;
     wire         s1_axi_rvalid,  s1_axi_rready;
 
-    // Slave 2: LED
     wire [31:0]  s2_axi_awaddr,  s2_axi_wdata,  s2_axi_araddr,  s2_axi_rdata;
     wire         s2_axi_awvalid, s2_axi_awready;
     wire [ 3:0]  s2_axi_wstrb;
@@ -141,7 +131,6 @@ module miniRV_SoC(
     wire         s2_axi_arvalid, s2_axi_arready;
     wire         s2_axi_rvalid,  s2_axi_rready;
 
-    // Slave 3: DigLED
     wire [31:0]  s3_axi_awaddr,  s3_axi_wdata,  s3_axi_araddr,  s3_axi_rdata;
     wire         s3_axi_awvalid, s3_axi_awready;
     wire [ 3:0]  s3_axi_wstrb;
@@ -150,7 +139,6 @@ module miniRV_SoC(
     wire         s3_axi_arvalid, s3_axi_arready;
     wire         s3_axi_rvalid,  s3_axi_rready;
 
-    // Slave 4: UART
     wire [31:0]  s4_axi_awaddr,  s4_axi_wdata,  s4_axi_araddr,  s4_axi_rdata;
     wire         s4_axi_awvalid, s4_axi_awready;
     wire [ 3:0]  s4_axi_wstrb;
@@ -159,7 +147,6 @@ module miniRV_SoC(
     wire         s4_axi_arvalid, s4_axi_arready;
     wire         s4_axi_rvalid,  s4_axi_rready;
 
-    // Slave 5: Timer
     wire [31:0]  s5_axi_awaddr,  s5_axi_wdata,  s5_axi_araddr,  s5_axi_rdata;
     wire         s5_axi_awvalid, s5_axi_awready;
     wire [ 3:0]  s5_axi_wstrb;
@@ -168,7 +155,6 @@ module miniRV_SoC(
     wire         s5_axi_arvalid, s5_axi_arready;
     wire         s5_axi_rvalid,  s5_axi_rready;
 
-    // ------ CPU + Cache + AXI Master ------
     cpu_top_axi U_cpu (
         .cpu_clk        (sys_clk),
         .cpu_rst        (sys_rst),
@@ -199,12 +185,10 @@ module miniRV_SoC(
         .m_axi_rvalid   (m_axi_rvalid)
     );
 
-    // ------ AXI Crossbar ------
     axi_crossbar U_crossbar (
         .aclk           (sys_clk),
         .areset         (sys_rst),
 
-        // Master
         .s_axi_awaddr   (m_axi_awaddr),
         .s_axi_awlen    (m_axi_awlen),
         .s_axi_awsize   (m_axi_awsize),
@@ -231,7 +215,6 @@ module miniRV_SoC(
         .s_axi_rlast    (m_axi_rlast),
         .s_axi_rvalid   (m_axi_rvalid),
 
-        // Slave 0: Memory
         .m0_axi_awaddr  (s0_axi_awaddr),
         .m0_axi_awlen   (s0_axi_awlen),
         .m0_axi_awsize  (s0_axi_awsize),
@@ -258,7 +241,6 @@ module miniRV_SoC(
         .m0_axi_rlast   (s0_axi_rlast),
         .m0_axi_rvalid  (s0_axi_rvalid),
 
-        // Slave 1: Switch
         .m1_axi_awaddr  (s1_axi_awaddr),
         .m1_axi_awvalid (s1_axi_awvalid),
         .m1_axi_awready (s1_axi_awready),
@@ -275,7 +257,6 @@ module miniRV_SoC(
         .m1_axi_rvalid  (s1_axi_rvalid),
         .m1_axi_rready  (s1_axi_rready),
 
-        // Slave 2: LED
         .m2_axi_awaddr  (s2_axi_awaddr),
         .m2_axi_awvalid (s2_axi_awvalid),
         .m2_axi_awready (s2_axi_awready),
@@ -292,7 +273,6 @@ module miniRV_SoC(
         .m2_axi_rvalid  (s2_axi_rvalid),
         .m2_axi_rready  (s2_axi_rready),
 
-        // Slave 3: DigLED
         .m3_axi_awaddr  (s3_axi_awaddr),
         .m3_axi_awvalid (s3_axi_awvalid),
         .m3_axi_awready (s3_axi_awready),
@@ -309,7 +289,6 @@ module miniRV_SoC(
         .m3_axi_rvalid  (s3_axi_rvalid),
         .m3_axi_rready  (s3_axi_rready),
 
-        // Slave 4: UART
         .m4_axi_awaddr  (s4_axi_awaddr),
         .m4_axi_awvalid (s4_axi_awvalid),
         .m4_axi_awready (s4_axi_awready),
@@ -326,7 +305,6 @@ module miniRV_SoC(
         .m4_axi_rvalid  (s4_axi_rvalid),
         .m4_axi_rready  (s4_axi_rready),
 
-        // Slave 5: Timer
         .m5_axi_awaddr  (s5_axi_awaddr),
         .m5_axi_awvalid (s5_axi_awvalid),
         .m5_axi_awready (s5_axi_awready),
@@ -344,7 +322,6 @@ module miniRV_SoC(
         .m5_axi_rready  (s5_axi_rready)
     );
 
-    // ------ Memory AXI port → top-level ------
     assign mem_axi_awaddr  = s0_axi_awaddr;
     assign mem_axi_awlen   = s0_axi_awlen;
     assign mem_axi_awsize  = s0_axi_awsize;
@@ -371,7 +348,6 @@ module miniRV_SoC(
     assign s0_axi_rlast    = mem_axi_rlast;
     assign s0_axi_rvalid   = mem_axi_rvalid;
 
-    // ------ Peripheral: Switch ------
     switch_wrap U_switch (
         .aclk       (sys_clk),
         .areset     (sys_rst),
@@ -393,7 +369,6 @@ module miniRV_SoC(
         .sw         (sw)
     );
 
-    // ------ Peripheral: LED ------
     led_wrap U_led (
         .aclk       (sys_clk),
         .areset     (sys_rst),
@@ -415,7 +390,6 @@ module miniRV_SoC(
         .led        (led)
     );
 
-    // ------ Peripheral: DigLED ------
     digled_wrap U_digled (
         .aclk       (sys_clk),
         .areset     (sys_rst),
@@ -440,7 +414,6 @@ module miniRV_SoC(
 
     assign dig_seg1 = dig_seg;
 
-    // ------ Peripheral: UART ------
     uart_wrap #(
         .CLK_FREQ   (50_000_000),
         .BAUD       (115200)
@@ -466,7 +439,6 @@ module miniRV_SoC(
         .tx         (tx)
     );
 
-    // ------ Peripheral: Timer ------
     timer_wrap U_timer (
         .aclk       (sys_clk),
         .areset     (sys_rst),
@@ -488,15 +460,12 @@ module miniRV_SoC(
     );
 
 `else
-    // ========================================================================
-    // 基本模式: cpu_core 直连 Inst_ROM + Data_RAM
-    // ========================================================================
+
     cpu_top U_cpu (
         .cpu_clk        (sys_clk),
         .cpu_rst        (sys_rst)
     );
 
-    // Non-AXI: tie off memory port
     assign mem_axi_awaddr  = 32'h0;
     assign mem_axi_awlen   = 8'h0;
     assign mem_axi_awsize  = 3'h0;
@@ -514,7 +483,6 @@ module miniRV_SoC(
     assign mem_axi_arvalid = 1'b0;
     assign mem_axi_rready  = 1'b0;
 
-    // Tie off peripheral outputs
     assign led     = 16'h0;
     assign dig_en  = 8'h0;
     assign dig_seg = 8'h0;

@@ -1,12 +1,7 @@
-// ============================================================================
-// switch_wrap_ip.v -- Switch peripheral (AXI4 -> AXI4-Lite + AXI GPIO)
-// ============================================================================
-// Address: 0xFFFF_0000, read-only 16-bit
-
 `timescale 1ns / 1ps
 
 module switch_wrap_ip (
-    // AXI4 Slave (from AXI Crossbar)
+
     input  wire         aclk,
     input  wire         aresetn,
 
@@ -36,11 +31,9 @@ module switch_wrap_ip (
     output wire         s_axi_rvalid,
     input  wire         s_axi_rready,
 
-    // FPGA pins
     input  wire [15:0]  sw
 );
 
-    // AXI4-Lite internal wires
     wire [31:0] sw_awaddr;
     wire        sw_awvalid, sw_awready;
     wire [31:0] sw_wdata;
@@ -54,7 +47,6 @@ module switch_wrap_ip (
     wire [ 1:0] sw_rresp;
     wire        sw_rvalid, sw_rready;
 
-    // AXI Protocol Converter (AXI4 -> AXI4-Lite)
     axi_protocol_converter_1 U_switch_converter (
         .aclk          (aclk),
         .aresetn       (aresetn),
@@ -88,7 +80,6 @@ module switch_wrap_ip (
         .m_axi_rvalid  (sw_rvalid),    .m_axi_rready (sw_rready)
     );
 
-    // AXI GPIO IP -- Switch (1-channel input)
     axi_gpio_1 U_switch (
         .s_axi_aclk    (aclk),
         .s_axi_aresetn (aresetn),

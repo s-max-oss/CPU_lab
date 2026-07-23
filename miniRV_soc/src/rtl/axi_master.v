@@ -9,27 +9,23 @@ module axi_master #(
     input  wire         aclk,
     input  wire         areset,
 
-    // ICache Interface
     output reg          ic_dev_rrdy,
     input  wire         ic_cpu_ren,
     input  wire [31:0]  ic_cpu_raddr,
     output reg          ic_dev_rvalid,
     output reg  [`IC_BLK_SIZE-1:0] ic_dev_rdata,
 
-    // DCache Write Interface
     output reg          dc_dev_wrdy,
     input  wire [ 3:0]  dc_cpu_wen,
     input  wire [31:0]  dc_cpu_waddr,
     input  wire [31:0]  dc_cpu_wdata,
 
-    // DCache Read Interface
     output reg          dc_dev_rrdy,
     input  wire         dc_cpu_ren,
     input  wire [31:0]  dc_cpu_raddr,
     output reg          dc_dev_rvalid,
     output reg  [`DC_BLK_SIZE-1:0] dc_dev_rdata,
 
-    // AXI4 Master — write address channel
     output reg  [31:0]  m_axi_awaddr,
     output reg  [ 7:0]  m_axi_awlen,
     output reg  [ 2:0]  m_axi_awsize,
@@ -37,19 +33,16 @@ module axi_master #(
     output reg          m_axi_awvalid,
     input  wire         m_axi_awready,
 
-    // AXI4 Master — write data channel
     output reg  [31:0]  m_axi_wdata,
     output reg  [ 3:0]  m_axi_wstrb,
     output wire         m_axi_wlast,
     output reg          m_axi_wvalid,
     input  wire         m_axi_wready,
 
-    // AXI4 Master — write response channel
     output reg          m_axi_bready,
     input  wire [ 1:0]  m_axi_bresp,
     input  wire         m_axi_bvalid,
 
-    // AXI4 Master — read address channel
     output reg  [31:0]  m_axi_araddr,
     output reg  [ 7:0]  m_axi_arlen,
     output reg  [ 2:0]  m_axi_arsize,
@@ -57,7 +50,6 @@ module axi_master #(
     output reg          m_axi_arvalid,
     input  wire         m_axi_arready,
 
-    // AXI4 Master — read data channel
     output reg          m_axi_rready,
     input  wire [31:0]  m_axi_rdata,
     input  wire [ 1:0]  m_axi_rresp,
@@ -104,7 +96,6 @@ module axi_master #(
     wire [7:0] ic_burst_len = IC_BLK_LEN - 1;
     wire [7:0] dc_burst_len = DC_BLK_LEN - 1;
 
-    // Single-beat writes always have wlast=1
     assign m_axi_wlast = (state == FSM_DC_WR_W) && m_axi_wvalid;
 
     always @(*) begin
@@ -193,7 +184,6 @@ module axi_master #(
                     end
                 end
 
-                // --- Write: AW channel ---
                 FSM_DC_WR_AW: begin
                     m_axi_awaddr  <= wr_addr;
                     m_axi_awlen   <= 8'h0;   // single beat for passthrough
@@ -202,7 +192,6 @@ module axi_master #(
                     m_axi_awvalid <= 1'b1;
                 end
 
-                // --- Write: W channel ---
                 FSM_DC_WR_W: begin
                     m_axi_awvalid <= 1'b0;  // AW handshake done
                     m_axi_wdata  <= wr_data;
@@ -210,7 +199,6 @@ module axi_master #(
                     m_axi_wvalid <= 1'b1;
                 end
 
-                // --- Write: B channel ---
                 FSM_DC_WR_B: begin
                     m_axi_wvalid <= 1'b0;  // W handshake done
                     if (m_axi_bvalid) begin
@@ -218,7 +206,6 @@ module axi_master #(
                     end
                 end
 
-                // --- DCache Read: AR channel ---
                 FSM_DC_RD: begin
                     m_axi_araddr  <= rd_addr;
                     m_axi_arlen   <= dc_burst_len;
@@ -227,7 +214,6 @@ module axi_master #(
                     m_axi_arvalid <= 1'b1;
                 end
 
-                // --- DCache Read: R channel ---
                 FSM_DC_RD_WAIT: begin
                     m_axi_arvalid <= 1'b0;  // AR handshake done
                     if (m_axi_rvalid && m_axi_rready) begin
@@ -251,7 +237,6 @@ module axi_master #(
                     end
                 end
 
-                // --- ICache Read: AR channel ---
                 FSM_IC_RD: begin
                     m_axi_araddr  <= rd_addr;
                     m_axi_arlen   <= ic_burst_len;
@@ -260,7 +245,6 @@ module axi_master #(
                     m_axi_arvalid <= 1'b1;
                 end
 
-                // --- ICache Read: R channel ---
                 FSM_IC_RD_WAIT: begin
                     m_axi_arvalid <= 1'b0;  // AR handshake done
                     if (m_axi_rvalid && m_axi_rready) begin

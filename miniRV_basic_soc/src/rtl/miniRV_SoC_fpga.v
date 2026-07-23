@@ -1,32 +1,10 @@
-// ============================================================================
-// miniRV_SoC_fpga.v — FPGA 综合顶层 (Vivado IP 版本, 单周期 CPU)
-// ============================================================================
-// 架构 (实验指导书 Lab 2 B-6 标准实现):
-//   cpu_top (单周期CPU+ICache+DCache+axi_master)
-//     → axi_crossbar_0 (Vivado IP) → 6 slaves:
-//       Slave 0: bram_axi_synth    (主存, 128KB)
-//       Slave 1: switch_wrap_ip    (拨码开关, AXI GPIO IP)
-//       Slave 2: led_wrap_ip       (LED, AXI GPIO IP)
-//       Slave 3: digled_wrap_ip    (数码管, AXI GPIO IP dual-channel)
-//       Slave 4: uart_wrap_ip      (UART, AXI Uartlite IP)
-//       Slave 5: timer_wrap_ip     (计时器, AXI GPIO IP dual-channel)
-//
-// 用法:
-//   - RUN_TRACE 模式: 绕过 PLL, 使用原始时钟 (仿真/调试)
-//   - 上板模式: 使用 clk_wiz_0 PLL (100MHz → 50MHz)
-//
-// 综合前必须先运行: vivado -mode batch -source src/ip/create_ips.tcl
-//
-// 时钟: 100MHz 外部输入 → clk_wiz_0 PLL → 50MHz 系统时钟
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 `include "defines.vh"
 
 module miniRV_SoC_fpga (
     input  wire         fpga_clk,        // 100MHz
-    input  wire         fpga_rst,        // Low Active (板上按键), RUN_TRACE 下 HIGH active
+    input  wire         fpga_rst,
     input  wire [15:0]  sw,
     output wire [15:0]  led,
     output wire [ 7:0]  dig_en,
@@ -36,9 +14,6 @@ module miniRV_SoC_fpga (
     output wire         tx
 );
 
-    // ------------------------------------------------------------------
-    // 时钟与复位
-    // ------------------------------------------------------------------
 `ifdef RUN_TRACE
     wire sys_clk = fpga_clk;
     wire sys_rst = fpga_rst;    // Trace test: fpga_rst is HIGH active
@@ -56,12 +31,8 @@ module miniRV_SoC_fpga (
     );
 `endif
 
-    // AXI 信号 (low-active reset for Vivado IPs)
     wire sys_rstn = !sys_rst;
 
-    // ------------------------------------------------------------------
-    // CPU AXI Master 接口 (cpu_top → crossbar)
-    // ------------------------------------------------------------------
     wire [31:0]  cpu_awaddr;
     wire [ 7:0]  cpu_awlen;
     wire [ 2:0]  cpu_awsize;
@@ -83,7 +54,6 @@ module miniRV_SoC_fpga (
     wire [ 1:0]  cpu_rresp;
     wire         cpu_rlast, cpu_rvalid;
 
-    // ------ 单周期 CPU + ICache + DCache + AXI Master ------
     cpu_top U_cpu (
         .cpu_clk        (sys_clk),
         .cpu_rst        (sys_rst),
@@ -114,10 +84,6 @@ module miniRV_SoC_fpga (
         .m_axi_rvalid   (cpu_rvalid)
     );
 
-    // ------------------------------------------------------------------
-    // AXI Crossbar IP — 1 Master → 6 Slaves
-    // ------------------------------------------------------------------
-    // Slave 0: Memory (AXI4)
     wire [31:0]  s0_awaddr, s0_araddr;
     wire [ 7:0]  s0_awlen,  s0_arlen;
     wire [ 2:0]  s0_awsize, s0_arsize;
@@ -133,7 +99,6 @@ module miniRV_SoC_fpga (
     wire [ 1:0]  s0_rresp;
     wire         s0_rlast;
 
-    // Slave 1-5: Peripherals (AXI4, packed arrays for crossbar concatenation)
     wire [31:0]  sN_awaddr   [1:5];
     wire [ 7:0]  sN_awlen    [1:5];
     wire [ 2:0]  sN_awsize   [1:5];
@@ -158,7 +123,6 @@ module miniRV_SoC_fpga (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
 
-        // S00_AXI: Master (from CPU)
         .s_axi_awaddr  (cpu_awaddr),  .s_axi_awlen  (cpu_awlen),
         .s_axi_awsize  (cpu_awsize),  .s_axi_awburst(cpu_awburst),
         .s_axi_awvalid (cpu_awvalid), .s_axi_awready(cpu_awready),
@@ -178,7 +142,6 @@ module miniRV_SoC_fpga (
         .s_axi_rlast   (cpu_rlast),   .s_axi_rvalid (cpu_rvalid),
         .s_axi_rready  (cpu_rready),
 
-        // M_AXI → 6 Slaves (packed array, M00 is first in concatenation)
         .m_axi_awaddr  ({sN_awaddr[5],   sN_awaddr[4],   sN_awaddr[3],
                           sN_awaddr[2],   sN_awaddr[1],   s0_awaddr}),
         .m_axi_awlen   ({sN_awlen[5],    sN_awlen[4],    sN_awlen[3],
@@ -231,9 +194,6 @@ module miniRV_SoC_fpga (
                           sN_rready[2],   sN_rready[1],   s0_rready})
     );
 
-    // ------------------------------------------------------------------
-    // Slave 0: BRAM 主存 (128KB, 可综合)
-    // ------------------------------------------------------------------
     bram_axi_synth #(
         .DATA_WIDTH (32),
         .DATA_DEPTH (32768),
@@ -268,9 +228,6 @@ module miniRV_SoC_fpga (
         .s_axi_rvalid   (s0_rvalid)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 1: Switch (AXI GPIO IP, read-only 16-bit input)
-    // ------------------------------------------------------------------
     switch_wrap_ip U_switch (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -291,9 +248,6 @@ module miniRV_SoC_fpga (
         .sw            (sw)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 2: LED (AXI GPIO IP, write 16-bit output)
-    // ------------------------------------------------------------------
     led_wrap_ip U_led (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -314,9 +268,6 @@ module miniRV_SoC_fpga (
         .led           (led)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 3: DigLED (AXI GPIO IP dual-channel, 7-segment display)
-    // ------------------------------------------------------------------
     digled_wrap_ip U_digled (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -339,9 +290,6 @@ module miniRV_SoC_fpga (
     );
     assign dig_seg1 = dig_seg;
 
-    // ------------------------------------------------------------------
-    // Slave 4: UART (AXI Uartlite IP, 115200 baud @ 50MHz)
-    // ------------------------------------------------------------------
     uart_wrap_ip U_uart (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -363,9 +311,6 @@ module miniRV_SoC_fpga (
         .tx            (tx)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 5: Timer (AXI GPIO IP dual-channel, 64-bit free-running counter)
-    // ------------------------------------------------------------------
     timer_wrap_ip U_timer (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),

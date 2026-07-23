@@ -1,22 +1,3 @@
-// ============================================================================
-// miniRV_SoC_fpga_ip.v — FPGA 综合顶层 (使用 Vivado IP 核版本)
-// ============================================================================
-// 架构 (实验指导 Lab 2 B-6 标准实现):
-//   cpu_top_axi → axi_crossbar_0 (IP) → 6 slaves:
-//     Slave 0: bram_axi_synth    (主存)
-//     Slave 1: switch_wrap_ip    (拨码开关, AXI GPIO IP)
-//     Slave 2: led_wrap_ip       (LED, AXI GPIO IP)
-//     Slave 3: digled_wrap_ip    (数码管, AXI GPIO IP dual-channel)
-//     Slave 4: uart_wrap_ip      (UART, AXI Uartlite IP)
-//     Slave 5: timer_wrap_ip     (计时器, AXI GPIO IP dual-channel)
-//
-// 与手写版 miniRV_SoC_fpga.v 的区别:
-//   - 用 Vivado IP 替代手写 wrapper
-//   - 用 AXI Protocol Converter 处理 AXI4 → AXI4-Lite
-//   - 必须先运行 create_ips.tcl 生成 .xci 文件
-//
-// 时钟: 100MHz 外部输入 → clk_wiz_0 PLL → 50MHz 系统时钟
-
 `timescale 1ns / 1ps
 
 `include "defines.vh"
@@ -33,9 +14,6 @@ module miniRV_SoC_fpga_ip (
     output wire         tx
 );
 
-    // ------------------------------------------------------------------
-    // 时钟与复位
-    // ------------------------------------------------------------------
 `ifdef RUN_TRACE
     wire sys_clk = fpga_clk;
     wire sys_rst = fpga_rst;
@@ -53,12 +31,8 @@ module miniRV_SoC_fpga_ip (
     );
 `endif
 
-    // AXI 信号 (low-active reset for IP)
     wire sys_rstn = !sys_rst;
 
-    // ------------------------------------------------------------------
-    // CPU AXI Master 接口
-    // ------------------------------------------------------------------
     wire [31:0]  cpu_awaddr;
     wire [ 7:0]  cpu_awlen;
     wire [ 2:0]  cpu_awsize;
@@ -110,10 +84,6 @@ module miniRV_SoC_fpga_ip (
         .m_axi_rvalid   (cpu_rvalid)
     );
 
-    // ------------------------------------------------------------------
-    // AXI Crossbar IP — 1 Master → 6 Slaves
-    // ------------------------------------------------------------------
-    // Slave 0: Memory (AXI4)
     wire [31:0]  s0_awaddr, s0_araddr;
     wire [ 7:0]  s0_awlen,  s0_arlen;
     wire [ 2:0]  s0_awsize, s0_arsize;
@@ -129,7 +99,6 @@ module miniRV_SoC_fpga_ip (
     wire [ 1:0]  s0_rresp;
     wire         s0_rlast;
 
-    // Slave 1-5: Peripherals (AXI4)
     wire [31:0]  sN_awaddr   [1:5];
     wire [ 7:0]  sN_awlen    [1:5];
     wire [ 2:0]  sN_awsize   [1:5];
@@ -154,7 +123,6 @@ module miniRV_SoC_fpga_ip (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
 
-        // S00_AXI: Master (from CPU)
         .s_axi_awaddr  (cpu_awaddr),  .s_axi_awlen  (cpu_awlen),
         .s_axi_awsize  (cpu_awsize),  .s_axi_awburst(cpu_awburst),
         .s_axi_awvalid (cpu_awvalid), .s_axi_awready(cpu_awready),
@@ -174,7 +142,6 @@ module miniRV_SoC_fpga_ip (
         .s_axi_rlast   (cpu_rlast),   .s_axi_rvalid (cpu_rvalid),
         .s_axi_rready  (cpu_rready),
 
-        // M00_AXI → Slave 0: Memory (AXI4)
         .m_axi_awaddr  ({sN_awaddr[5],   sN_awaddr[4],   sN_awaddr[3],
                           sN_awaddr[2],   sN_awaddr[1],   s0_awaddr}),
         .m_axi_awlen   ({sN_awlen[5],    sN_awlen[4],    sN_awlen[3],
@@ -227,9 +194,6 @@ module miniRV_SoC_fpga_ip (
                           sN_rready[2],   sN_rready[1],   s0_rready})
     );
 
-    // ------------------------------------------------------------------
-    // Slave 0: BRAM 主存 (128KB, 可综合)
-    // ------------------------------------------------------------------
     bram_axi_synth #(
         .DATA_WIDTH (32),
         .DATA_DEPTH (32768),
@@ -264,9 +228,6 @@ module miniRV_SoC_fpga_ip (
         .s_axi_rvalid   (s0_rvalid)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 1: Switch (AXI GPIO IP)
-    // ------------------------------------------------------------------
     switch_wrap_ip U_switch (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -287,9 +248,6 @@ module miniRV_SoC_fpga_ip (
         .sw            (sw)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 2: LED (AXI GPIO IP)
-    // ------------------------------------------------------------------
     led_wrap_ip U_led (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -310,9 +268,6 @@ module miniRV_SoC_fpga_ip (
         .led           (led)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 3: DigLED (AXI GPIO IP dual-channel)
-    // ------------------------------------------------------------------
     digled_wrap_ip U_digled (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -335,9 +290,6 @@ module miniRV_SoC_fpga_ip (
     );
     assign dig_seg1 = dig_seg;
 
-    // ------------------------------------------------------------------
-    // Slave 4: UART (AXI Uartlite IP)
-    // ------------------------------------------------------------------
     uart_wrap_ip U_uart (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),
@@ -359,9 +311,6 @@ module miniRV_SoC_fpga_ip (
         .tx            (tx)
     );
 
-    // ------------------------------------------------------------------
-    // Slave 5: Timer (AXI GPIO IP dual-channel)
-    // ------------------------------------------------------------------
     timer_wrap_ip U_timer (
         .aclk          (sys_clk),
         .aresetn       (sys_rstn),

@@ -1,13 +1,3 @@
-// ============================================================================
-// ID_EX_Reg.v — ID/EX 流水线寄存器
-// ============================================================================
-// 连接 ID（译码/寄存器读）和 EX（执行）阶段。
-// 锁存寄存器读值、立即数、目标寄存器号以及全部控制信号。
-//
-// flush=1 → 控制信号清零（插入气泡/Bubble）— 分支跳转、load-use stall
-// stall=1 → 保持当前值（Hold）— 多周期乘除法阻塞
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 module ID_EX_Reg (
@@ -16,7 +6,6 @@ module ID_EX_Reg (
     input  wire         flush,
     input  wire         stall,
 
-    // 数据通路
     input  wire [31:0]  pc_in,
     input  wire [31:0]  rD1_in,
     input  wire [31:0]  rD2_in,
@@ -26,7 +15,6 @@ module ID_EX_Reg (
     input  wire [ 4:0]  rs2_addr_in,
     input  wire [ 4:0]  rd_addr_in,
 
-    // 控制信号 — 来自 Controller（译码时产生）
     input  wire [ 1:0]  npc_op_in,
     input  wire [ 4:0]  alu_op_in,
     input  wire         alua_sel_in,
@@ -36,7 +24,7 @@ module ID_EX_Reg (
     input  wire [ 3:0]  ram_wop_in,
     input  wire         rf_we_in,
     input  wire [ 1:0]  rf_wsel_in,
-    // 输出（打一拍）
+
     output reg  [31:0]  pc_out,
     output reg  [31:0]  rD1_out,
     output reg  [31:0]  rD2_out,
@@ -59,7 +47,7 @@ module ID_EX_Reg (
 
     always @(posedge clk or posedge rst) begin
         if (rst || flush) begin
-            // 气泡：控制信号全部清零 = NOP（不写寄存器、不访存、顺序执行）
+
             pc_out        <= 32'h0;
             rD1_out       <= 32'h0;
             rD2_out       <= 32'h0;

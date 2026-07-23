@@ -2,11 +2,10 @@
 
 `include "defines.vh"
 
-
 module DCache(
     input  wire         cpu_clk,
     input  wire         cpu_rst,        // high active
-    // Interface to CPU
+
     input  wire [ 3:0]  data_ren,
     input  wire [31:0]  data_addr,
     output reg          data_valid,
@@ -14,12 +13,12 @@ module DCache(
     input  wire [ 3:0]  data_wen,
     input  wire [31:0]  data_wdata,
     output reg          data_wresp,
-    // Interface to Write Bus
+
     input  wire         dev_wrdy,
     output reg  [ 3:0]  cpu_wen,
     output reg  [31:0]  cpu_waddr,
     output reg  [31:0]  cpu_wdata,
-    // Interface to Read Bus
+
     input  wire         dev_rrdy,
     output reg  [ 3:0]  cpu_ren,
     output reg  [31:0]  cpu_raddr,
@@ -27,7 +26,6 @@ module DCache(
     input  wire [127:0] dev_rdata
 );
 
-    // Peripherals access should be uncached.
     wire uncached = (data_addr[31:16] == 16'hFFFF) && (data_ren != 4'h0 || data_wen != 4'h0) ? 1'b1 : 1'b0;
 
 `ifdef ENABLE_DCACHE
@@ -37,7 +35,6 @@ module DCache(
     wire        valid_bit      = cache_line_r[133];
     wire [4:0]  tag_from_cache = cache_line_r[132:128];
 
-    // Read FSM (cached path: R_IDLE -> R_TAG_CHECK -> hit?R_IDLE : R_REFILL -> R_TAG_CHECK)
     localparam R_IDLE      = 3'd0;
     localparam R_TAG_CHECK = 3'd1;
     localparam R_REFILL    = 3'd2;
@@ -45,7 +42,6 @@ module DCache(
     localparam R_BUS1      = 3'd4;
     reg [2:0] r_state, r_nstat;
 
-    // Write FSM
     localparam W_IDLE      = 3'd0;
     localparam W_TAG_CHECK = 3'd1;
     localparam W_BUS0      = 3'd2;
@@ -56,7 +52,6 @@ module DCache(
     wire hit_r = (r_state == R_TAG_CHECK) && valid_bit && (tag_from_cache == tag_from_cpu);
     wire hit_w = (w_state == W_TAG_CHECK) && valid_bit && (tag_from_cache == tag_from_cpu);
 
-    // Uncached read: registered outputs (matching passthrough timing)
     reg        uncached_valid;
     reg [31:0] uncached_rdata;
 
@@ -130,12 +125,10 @@ module DCache(
     reg        refill_req;
     reg [3:0]  ren_saved;
 
-    // Read FSM state register
     always @(posedge cpu_clk or posedge cpu_rst) begin
         r_state <= cpu_rst ? R_IDLE : r_nstat;
     end
 
-    // Read FSM next-state logic
     always @(*) begin
         case (r_state)
             R_IDLE: begin
@@ -154,7 +147,6 @@ module DCache(
         endcase
     end
 
-    // Read FSM output logic
     always @(posedge cpu_clk or posedge cpu_rst) begin
         if (cpu_rst) begin
             cpu_ren        <= 4'h0;
@@ -207,7 +199,6 @@ module DCache(
         end
     end
 
-    // Write FSM
     reg [3:0] wen_saved;
 
     always @(posedge cpu_clk or posedge cpu_rst) begin

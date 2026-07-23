@@ -1,18 +1,3 @@
-// ============================================================================
-// divider.v — 恢复余数除法器（多周期）
-// ============================================================================
-// 【算法】恢复余数除法（restoring division），每次迭代 1 位商
-// 【时序】1 周期加载 + WIDTH 周期迭代 + 1 周期写回
-//   - 除零 / 有符号溢出：2 周期完成（special_pending）
-//   - start 脉冲启动（1 拍有效）
-//   - busy 有效期间表示正在计算
-//   - busy 下降沿表示结果 z/r 有效
-// 【关键路径】1 次 WIDTH+1 位减法 ≈ 3-4ns，轻松满足 25-50MHz
-// 【符号处理】内部用绝对值做无符号除法，最后按 RISC-V 规范调整符号
-//   - 除零：商 = -1，余数 = 被除数
-//   - 有符号溢出（MIN_INT / -1）：商 = MIN_INT，余数 = 0
-// ============================================================================
-
 `timescale 1ns / 1ps
 
 module divider #(
@@ -20,13 +5,13 @@ module divider #(
 )(
     input  wire                 clk,
     input  wire                 rst,
-    input  wire [WIDTH-1:0]     x,          // 被除数
-    input  wire [WIDTH-1:0]     y,          // 除数
-    input  wire                 start,      // 启动信号
-    output reg  [WIDTH-1:0]     z,          // 商（quotient）
-    output reg  [WIDTH-1:0]     r,          // 余数（remainder）
-    output reg                  busy,       // 忙标志
-    output reg                  done        // 完成脉冲（1 周期）
+    input  wire [WIDTH-1:0]     x,
+    input  wire [WIDTH-1:0]     y,
+    input  wire                 start,
+    output reg  [WIDTH-1:0]     z,
+    output reg  [WIDTH-1:0]     r,
+    output reg                  busy,
+    output reg                  done
 );
 
     localparam COUNT_W = WIDTH <= 2 ? 1 : $clog2(WIDTH);
@@ -64,18 +49,18 @@ module divider #(
             busy               <= 1'b0;
             done               <= 1'b0;
         end else begin
-            done <= 1'b0;  // 默认清零（单周期脉冲）
+            done <= 1'b0;
             if (start && !busy && !done) begin
                 busy <= 1'b1;
                 count <= {COUNT_W{1'b0}};
 
                 if (y == {WIDTH{1'b0}}) begin
-                    // 除零：商 = -1（全F），余数 = 被除数
+
                     z <= {WIDTH{1'b1}};
                     r <= x;
                     special_pending <= 1'b1;
                 end else if (signed_overflow) begin
-                    // 有符号溢出：-2^(WIDTH-1) / -1
+
                     z <= x;
                     r <= {WIDTH{1'b0}};
                     special_pending <= 1'b1;

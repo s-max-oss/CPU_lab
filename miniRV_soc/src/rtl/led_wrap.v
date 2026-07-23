@@ -1,27 +1,9 @@
-// ============================================================================
-// led_wrap.v — LED 外设 (AXI4-Lite Slave)
-// ============================================================================
-// 地址: 0xFFFF_1000, 读写 16-bit
-//   写入 wdata[15:0] 控制 LED (高有效), 读取返回当前 LED 状态
-//
-// AXI4-Lite 写协议 — 关键修复:
-//   AXI4-Lite 规范中 AW 通道和 W 通道是独立的, master 可以在不同周期先后
-//   完成 AW 握手和 W 握手。本模块使用 aw_hs/w_hs 标志位分别跟踪两个通道
-//   的握手完成状态, 在两者都完成后才拉高 bvalid 发送写响应。
-//   原始实现: bvalid 条件为 `awvalid && wvalid` (要求两通道同时有效)
-//   Bug: axi_master 先完成 AW 握手(awvalid 已清除)再发 W, bvalid 永远不拉高
-//   修复: aw_hs/w_hs 独立跟踪握手, bvalid = aw_hs && w_hs
-//
-//   bvalid 清除也必须用 `bvalid && bready` 而非单独 `bready`,
-//   因为 axi_master 持续保持 bready=1, 单独 bready 会立即清除刚置位的 bvalid.
-
 `timescale 1ns / 1ps
 
 module led_wrap (
     input  wire         aclk,
     input  wire         areset,         // high active
 
-    // AXI4-Lite Slave
     input  wire [31:0]  awaddr,
     input  wire         awvalid,
     output wire         awready,
@@ -38,7 +20,6 @@ module led_wrap (
     output wire         rvalid,
     input  wire         rready,
 
-    // FPGA I/O
     output wire [15:0]  led
 );
 
@@ -46,18 +27,8 @@ module led_wrap (
     assign wready  = 1'b1;
     assign arready = 1'b1;
 
-    // ========================================================================
-    // AXI4-Lite 写通道握手跟踪
-    // ========================================================================
-    // AW (地址写) 和 W (数据写) 是两个独立通道, master 可能:
-    //   1) 同时发送 AW+W (awvalid && wvalid 同周期为高)
-    //   2) 先发 AW 再发 W (awvalid 先握手, wvalid 后握手)
-    //   3) 先发 W 再发 AW (wvalid 先握手, awvalid 后握手)
-    // aw_hs/w_hs 分别记录各自通道的握手完成, B 通道响应在两个都完成后发送.
-    // 握手完成后在 bvalid && bready 时清除 (B 通道握手完成), 准备下一次写.
     reg aw_hs, w_hs;
 
-    // LED register
     reg [15:0] led_reg;
     always @(posedge aclk or posedge areset) begin
         if (areset) begin
@@ -75,7 +46,6 @@ module led_wrap (
     end
     assign led = led_reg;
 
-    // Write response (assert after BOTH AW and W handshakes complete)
     reg bvalid_reg;
     always @(posedge aclk or posedge areset)
         if (areset) bvalid_reg <= 1'b0;
@@ -83,7 +53,6 @@ module led_wrap (
         else if (aw_hs && w_hs) bvalid_reg <= 1'b1;
     assign bvalid = bvalid_reg;
 
-    // Read response
     reg [31:0] rdata_reg;
     reg        rvalid_reg;
     always @(posedge aclk or posedge areset)
