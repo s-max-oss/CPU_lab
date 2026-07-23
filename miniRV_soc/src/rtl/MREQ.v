@@ -59,10 +59,8 @@ module MREQ (
             end
 
             // SH: 写半字 — 地址对齐到2字节边界
-            // offset[1]=0 → 写低2字节(4'b0011)；offset[1]=1 → 写高2字节(4'b1100)
-            // 注意：offset[0] 应当是0（半字对齐），这里没有检查
             `RAM_WE_H: begin
-                da_wen   = (offset[1] == 1'b0) ? 4'b0011 : 4'b1100;
+                da_wen   = (offset[0] == 1'b0) ? ((offset[1] == 1'b0) ? 4'b0011 : 4'b1100) : 4'h0;
                 da_wdata = ram_wdata << (offset[1] * 16);
             end
 

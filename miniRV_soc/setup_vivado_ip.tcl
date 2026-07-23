@@ -29,7 +29,7 @@ open_project $prj_path
 # ---------------------------------------------------------------------------
 # 1. Verilog defines
 # ---------------------------------------------------------------------------
-set_property verilog_define {USE_AXI_IP RUN_TRACE} [current_fileset]
+set_property verilog_define {USE_AXI USE_AXI_IP RUN_TRACE} [current_fileset]
 
 # ---------------------------------------------------------------------------
 # 2. Add RTL source files (not IPs -- those are already in the project)

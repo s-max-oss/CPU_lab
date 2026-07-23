@@ -141,7 +141,9 @@ module cpu_core(
     //   - 硬件综合后 BRAM clk-to-q 延迟确保时序收敛
 
     // 流水线阻塞期间不发起新取指，避免 ICache 数据在 IF_ID 无法捕获时丢失
-    assign ifetch_req  = !cpu_rst && !load_wait && !stall_load;
+    // mul_div_stall 期间停止 ICache 请求，防止 34 周期停滞填满 ICache 管线
+    // 停滞结束后 ICache 从干净状态开始，避免响应旧地址的脏数据
+    assign ifetch_req  = !cpu_rst && !load_wait && !stall_load && !mul_div_stall;
 
     // stall=1 时 IROM 地址回退 4 字节，重新取指被 IF/ID 丢弃的那条指令
     // 原因：同步 BRAM 有 1 周期读延迟，stall 阻止 IF/ID 捕获时 IROM 已
@@ -192,7 +194,7 @@ module cpu_core(
     IF_ID_Reg U_IF_ID (
         .clk      (cpu_clk),
         .rst      (cpu_rst),
-        .flush    (flush || flush_d1),
+        .flush    (flush || flush_d1 || mul_div_flush),
         .stall    (stall),
         .clear    (if_clear),
         .pc_in    (pc),
@@ -454,7 +456,7 @@ module cpu_core(
     EX_MEM_Reg U_EX_MEM (
         .clk            (cpu_clk),
         .rst            (cpu_rst),
-        .flush          (1'b0),
+        .flush          (mul_div_flush),
         .stall          (mem_stall),
         .alu_c_in       (ex_alu_c),
         .rD2_in         (ex_rD2),
@@ -464,7 +466,7 @@ module cpu_core(
         .npc_op_in      (ex_npc_op),
         .ram_rop_in     (ex_ram_rop),
         .ram_wop_in     (ex_ram_wop),
-        .rf_we_in       (ex_rf_we),
+        .rf_we_in       (ex_rf_we && !mul_div_flush),
         .rf_wsel_in     (ex_rf_wsel),
         .alu_c_out      (mem_alu_c),
         .rD2_out        (mem_rD2),
@@ -559,7 +561,7 @@ module cpu_core(
     wire [31:0] debug_wb_rf_wD /* verilator public */ ;
 
     assign debug_wb_pc    = wb_pc4 - 32'd4;
-    assign debug_wb_rf_we = wb_rf_we;
+    assign debug_wb_rf_we = wb_rf_we && !mem_stall;
     assign debug_wb_rf_wR = wb_rd_addr;
     assign debug_wb_rf_wD = wb_wD;
 
